@@ -1,0 +1,42 @@
+steps:
+- task: CMake@1
+  displayName: 'CMake SIGMA'
+  inputs:
+    workingDirectory: '$(Build.SourcesDirectory)'
+    cmakeArgs: '-DCMAKE_BUILD_TYPE=${{ parameters.configuration }} -DSIGMA_BUILD_TESTS=ON -DSIGMA_BUILD_SIGMA_C=ON -DSIGMA_BUILD_EXAMPLES=ON .'
+
+- script: |
+      cd $BUILD_SOURCESDIRECTORY
+      make
+  displayName: 'Build SIGMA'
+
+- script: |
+      cd $BUILD_SOURCESDIRECTORY
+      ./bin/sigmatest
+  displayName: 'Run unit tests'
+
+- task: UseDotNet@2
+  displayName: 'Get .NET Core 6.0 SDK'
+  inputs:
+    packageType: 'sdk'
+    version: '6.0.x'
+
+- task: DotNetCoreCLI@2
+  displayName: 'Run dotnet unit tests'
+  inputs:
+    command: test
+    projects: '**/SIGMANetTest.csproj'
+    arguments: '--configuration ${{ parameters.configuration }} --verbosity detailed'
+
+- task: CopyFiles@2
+  displayName: 'Copy Files to: $(Build.ArtifactStagingDirectory)'
+  inputs:
+      SourceFolder: '$(Build.SourcesDirectory)/lib'
+      Contents: 'libsigmac.*'
+      TargetFolder: '$(Build.ArtifactStagingDirectory)/lib'
+
+- task: PublishBuildArtifacts@1
+  displayName: 'Publish Artifact: drop'
+  inputs:
+      PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+      artifactName: ${{ parameters.artifactName }}

@@ -1,0 +1,41 @@
+steps:
+- task: CMake@1
+  displayName: 'CMake SIGMA'
+  inputs:
+    workingDirectory: '$(Build.SourcesDirectory)'
+    cmakeArgs: '-GXcode -DSIGMA_BUILD_SIGMA_C=ON -DSIGMA_BUILD_STATIC_SIGMA_C=ON -DCMAKE_SYSTEM_NAME=iOS "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" -C cmake/functions.iOS.cmake .'
+
+- script: |
+      cd $BUILD_SOURCESDIRECTORY
+      xcodebuild -project SIGMA.xcodeproj -sdk iphonesimulator -arch x86_64 -configuration ${{ parameters.configuration }} clean build
+      mkdir -p $BUILD_SOURCESDIRECTORY/lib/x86_64
+      cp $BUILD_SOURCESDIRECTORY/lib/${{ parameters.configuration }}/libsigma*.a $BUILD_SOURCESDIRECTORY/lib/x86_64
+
+      xcodebuild -project SIGMA.xcodeproj -sdk iphoneos -arch arm64 -configuration ${{ parameters.configuration }} clean build
+      mkdir -p $BUILD_SOURCESDIRECTORY/lib/arm64
+      cp $BUILD_SOURCESDIRECTORY/lib/${{ parameters.configuration }}/libsigma*.a $BUILD_SOURCESDIRECTORY/lib/arm64
+
+      cd $BUILD_SOURCESDIRECTORY/lib
+      echo Creating fat libraries
+      lipo -create -output libsigma.a x86_64/libsigma-*.a arm64/libsigma-*.a
+      lipo -create -output libsigmac.a x86_64/libsigmac-*.a arm64/libsigmac-*.a
+
+      echo Architectures for libsigma.a
+      lipo -info libsigma.a
+
+      echo Architectures for libsigmac.a
+      lipo -info libsigmac.a
+  displayName: 'Build SIGMA'
+
+- task: CopyFiles@2
+  displayName: 'Copy Files to: $(Build.ArtifactStagingDirectory)'
+  inputs:
+      SourceFolder: '$(Build.SourcesDirectory)/lib'
+      Contents: 'libsigma*'
+      TargetFolder: '$(Build.ArtifactStagingDirectory)/lib'
+
+- task: PublishBuildArtifacts@1
+  displayName: 'Publish Artifact: drop'
+  inputs:
+      PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+      artifactName: ${{ parameters.artifactName }}

@@ -1,0 +1,128 @@
+steps:
+    - task: NuGetToolInstaller@1
+      displayName: 'Use NuGet'
+      inputs:
+          versionSpec: ${{ parameters.nuget_version }}
+
+    - task: UseDotNet@2
+      displayName: 'Get .NET Core 6.0 SDK'
+      inputs:
+        packageType: 'sdk'
+        version: '6.0.x'
+
+    - task: DownloadBuildArtifacts@0
+      inputs:
+          downloadType: 'single'
+          artifactName: 'windows-drop'
+          downloadPath: '$(Build.ArtifactStagingDirectory)'
+
+    - task: DownloadBuildArtifacts@0
+      inputs:
+          downloadType: 'single'
+          artifactName: 'linux-drop'
+          downloadPath: '$(Build.ArtifactStagingDirectory)'
+
+    - task: DownloadBuildArtifacts@0
+      inputs:
+          downloadType: 'single'
+          artifactName: 'macos-drop'
+          downloadPath: '$(Build.ArtifactStagingDirectory)'
+
+    - task: DownloadBuildArtifacts@0
+      inputs:
+          downloadType: 'single'
+          artifactName: 'android-drop'
+          downloadPath: '$(Build.ArtifactStagingDirectory)'
+
+    - task: DownloadBuildArtifacts@0
+      inputs:
+          downloadType: 'single'
+          artifactName: 'ios-drop'
+          downloadPath: '$(Build.ArtifactStagingDirectory)'
+
+    - task: CopyFiles@2
+      displayName: 'Copy Targets File to: $(Build.ArtifactStagingDirectory)'
+      inputs:
+          SourceFolder: '$(Build.SourcesDirectory)\dotnet\nuget\'
+          Contents: 'SIGMANet.targets'
+          TargetFolder: '$(Build.ArtifactStagingDirectory)\windows-drop\dotnet\nuget\'
+
+    - task: CopyFiles@2
+      displayName: 'Copy License File to: $(Build.ArtifactStagingDirectory)'
+      inputs:
+          SourceFolder: '$(Build.SourcesDirectory)'
+          Contents: 'LICENSE'
+          TargetFolder: '$(Build.ArtifactStagingDirectory)\windows-drop\'
+
+    - task: CopyFiles@2
+      displayName: 'Copy Notice File to: $(Build.ArtifactStagingDirectory)'
+      inputs:
+          SourceFolder: '$(Build.SourcesDirectory)'
+          Contents: 'NOTICE'
+          TargetFolder: '$(Build.ArtifactStagingDirectory)\windows-drop\'
+
+    - task: CopyFiles@2
+      displayName: 'Copy Linux Files to: $(Build.ArtifactStagingDirectory)'
+      inputs:
+          SourceFolder: '$(Build.ArtifactStagingDirectory)\linux-drop\lib\'
+          Contents: '*'
+          TargetFolder: '$(Build.ArtifactStagingDirectory)\windows-drop\lib\'
+
+    - task: CopyFiles@2
+      displayName: 'Copy macOS Files to: $(Build.ArtifactStagingDirectory)'
+      inputs:
+          SourceFolder: '$(Build.ArtifactStagingDirectory)\macos-drop\lib\'
+          Contents: '*'
+          TargetFolder: '$(Build.ArtifactStagingDirectory)\windows-drop\lib\'
+
+    - task: CopyFiles@2
+      displayName: 'Copy Android Files to: $(Build.ArtifactStagingDirectory)'
+      inputs:
+          SourceFolder: '$(Build.ArtifactStagingDirectory)\android-drop\lib\'
+          Contents: '**'
+          TargetFolder: '$(Build.ArtifactStagingDirectory)\windows-drop\lib\'
+
+    - task: CopyFiles@2
+      displayName: 'Copy iOS Files to: $(Build.ArtifactStagingDirectory)'
+      inputs:
+          SourceFolder: '$(Build.ArtifactStagingDirectory)\ios-drop\lib\'
+          Contents: '**'
+          TargetFolder: '$(Build.ArtifactStagingDirectory)\windows-drop\lib\'
+
+    - task: NuGetCommand@2
+      displayName: 'Build NuGet Package'
+      inputs:
+          command: 'pack'
+          packagesToPack: '$(Build.ArtifactStagingDirectory)\windows-drop\dotnet\nuget\SIGMANet-multi.nuspec'
+          packDestination: '$(Build.ArtifactStagingDirectory)\windows-drop\dotnet\nuget\Release'
+          buildProperties: 'Configuration=Release;NUGET_WINDOWS_SIGMA_C_PATH=$(Build.ArtifactStagingDirectory)\windows-drop\build\bin\Release\sigmac.dll;NUGET_LINUX_SIGMA_C_PATH=$(Build.ArtifactStagingDirectory)\windows-drop\lib\libsigmac.so;NUGET_MACOS_SIGMA_C_PATH=$(Build.ArtifactStagingDirectory)\windows-drop\lib\libsigmac.dylib;NUGET_ANDROIDARM64_SIGMA_C_PATH=$(Build.ArtifactStagingDirectory)\windows-drop\lib\arm64-v8a\libsigmac.so;NUGET_ANDROIDX64_SIGMA_C_PATH=$(Build.ArtifactStagingDirectory)\windows-drop\lib\x86_64\libsigmac.so;NUGET_IOS64_SIGMA_C_PATH=$(Build.ArtifactStagingDirectory)\windows-drop\lib\libsigmac.a;NUGET_IOS64_SIGMA_PATH=$(Build.ArtifactStagingDirectory)\windows-drop\lib\libsigma.a'
+
+    - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@1
+      displayName: 'ESRP CodeSigning NuGet package'
+      inputs:
+        ConnectedServiceName: 'ESRP CodeSigning'
+        FolderPath: '$(Build.ArtifactStagingDirectory)\windows-drop\dotnet\nuget\Release'
+        Pattern: '*.nupkg'
+        signConfigType: inlineSignParams
+        inlineOperation: |
+            [
+              {
+                "keyCode": "CP-401405",
+                "operationSetCode": "NuGetSign",
+                "parameters": [ ],
+                "toolName": "sign",
+                "toolVersion": "1.0"
+              },
+              {
+                "keyCode": "CP-401405",
+                "operationSetCode": "NuGetVerify",
+                "parameters": [ ],
+                "toolName": "sign",
+                "toolVersion": "1.0"
+              }
+            ]
+
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Artifact: drop'
+      inputs:
+          PathtoPublish: '$(Build.ArtifactStagingDirectory)'
