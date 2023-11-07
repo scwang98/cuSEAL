@@ -26,7 +26,6 @@ set(SIGMA_SOURCE_FILES ${SIGMA_SOURCE_FILES}
         ${CMAKE_CURRENT_LIST_DIR}/uintarithsmallmod.cpp
         ${CMAKE_CURRENT_LIST_DIR}/uintcore.cpp
         ${CMAKE_CURRENT_LIST_DIR}/ztools.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/devicearray.cu
         ${CMAKE_CURRENT_LIST_DIR}/memorypool_cuda.cu
 )
 

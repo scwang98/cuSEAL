@@ -70,7 +70,7 @@ namespace sigma
         {
             using ModArithLazy = Arithmetic<uint64_t, MultiplyUIntModOperand, MultiplyUIntModOperand>;
             using NTTHandler = DWTHandler<std::uint64_t, MultiplyUIntModOperand, MultiplyUIntModOperand>;
-            friend class NTTTablesCuda;
+            friend class CUNTTTables;
 
         public:
             NTTTables(NTTTables &&source) = default;

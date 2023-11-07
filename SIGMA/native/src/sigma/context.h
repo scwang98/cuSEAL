@@ -12,6 +12,7 @@
 #include "sigma/util/rns.h"
 #include <memory>
 #include <unordered_map>
+#include "util/ntt_cuda.cuh"
 
 namespace sigma
 {
@@ -327,6 +328,11 @@ namespace sigma
                 return small_ntt_tables_.get();
             }
 
+            SIGMA_NODISCARD inline const util::ConstDevicePointer<util::CUNTTTables> device_small_ntt_tables() const noexcept
+            {
+                return device_small_ntt_tables_.asPointer();
+            }
+
             /**
             Returns a constant pointer to the NTT tables.
             */
@@ -452,6 +458,7 @@ namespace sigma
             util::Pointer<util::RNSTool> rns_tool_;
 
             util::Pointer<util::NTTTables> small_ntt_tables_;
+            util::DeviceArray<util::CUNTTTables> device_small_ntt_tables_;
 
             util::Pointer<util::NTTTables> plain_ntt_tables_;
 

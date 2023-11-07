@@ -12,6 +12,7 @@
 #include "sigma/util/globals.h"
 #include "sigma/util/hash.h"
 #include "sigma/util/ztools.h"
+#include "util/devicearray.cuh"
 #include <functional>
 #include <iostream>
 #include <memory>
@@ -201,6 +202,8 @@ namespace sigma
             }
 
             coeff_modulus_ = coeff_modulus;
+            auto host_array = util::HostArray(coeff_modulus.data(), coeff_modulus.size());
+            device_coeff_modulus_ = util::DeviceArray(host_array);
 
             // Re-compute the parms_id
             compute_parms_id();
@@ -288,6 +291,11 @@ namespace sigma
         SIGMA_NODISCARD inline const std::vector<Modulus> &coeff_modulus() const noexcept
         {
             return coeff_modulus_;
+        }
+
+        SIGMA_NODISCARD inline const util::DeviceArray<Modulus> &device_coeff_modulus() const noexcept
+        {
+            return device_coeff_modulus_;
         }
 
         /**
@@ -496,6 +504,8 @@ namespace sigma
         std::size_t poly_modulus_degree_ = 0;
 
         std::vector<Modulus> coeff_modulus_{};
+
+        util::DeviceArray<Modulus> device_coeff_modulus_;
 
         std::shared_ptr<UniformRandomGeneratorFactory> random_generator_{ nullptr };
 

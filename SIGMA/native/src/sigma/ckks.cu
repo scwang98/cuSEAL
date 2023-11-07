@@ -2,8 +2,11 @@
 // Licensed under the MIT license.
 
 #include "sigma/ckks.h"
+#include "kernelutils.cuh"
+#include "cuComplex.h"
 #include <random>
 #include <stdexcept>
+#include <cfloat>
 
 using namespace std;
 using namespace sigma::util;
@@ -28,7 +31,7 @@ namespace sigma
         slots_ = coeff_count >> 1;
         int logn = get_power_of_two(coeff_count);
 
-        matrix_reps_index_map_ = allocate<size_t>(coeff_count, pool_);
+        auto host_matrix_reps_index_map_ = HostArray<size_t>(coeff_count);
 
         // Copy from the matrix to the value vectors
         uint64_t gen = 3;
@@ -41,17 +44,19 @@ namespace sigma
             uint64_t index2 = (m - pos - 1) >> 1;
 
             // Set the bit-reversed locations
-            matrix_reps_index_map_[i] = safe_cast<size_t>(reverse_bits(index1, logn));
-            matrix_reps_index_map_[slots_ | i] = safe_cast<size_t>(reverse_bits(index2, logn));
+            host_matrix_reps_index_map_[i] = safe_cast<size_t>(reverse_bits(index1, logn));
+            host_matrix_reps_index_map_[slots_ | i] = safe_cast<size_t>(reverse_bits(index2, logn));
 
             // Next primitive root
             pos *= gen;
             pos &= (m - 1);
         }
 
+        matrix_reps_index_map_ = host_matrix_reps_index_map_;
+
         // We need 1~(n-1)-th powers of the primitive 2n-th root, m = 2n
         root_powers_ = allocate<complex<double>>(coeff_count, pool_);
-        inv_root_powers_ = allocate<complex<double>>(coeff_count, pool_);
+        auto host_inv_root_power = HostArray<cuDoubleComplex>(coeff_count);
         // Powers of the primitive 2n-th root have 4-fold symmetry
         if (m >= 8)
         {
@@ -59,25 +64,238 @@ namespace sigma
             for (size_t i = 1; i < coeff_count; i++)
             {
                 root_powers_[i] = complex_roots_->get_root(reverse_bits(i, logn));
-                inv_root_powers_[i] = conj(complex_roots_->get_root(reverse_bits(i - 1, logn) + 1));
+                auto com = complex_roots_->get_root(reverse_bits(i - 1, logn) + 1);
+                host_inv_root_power[i] = make_cuDoubleComplex (com.real(), -com.imag());
             }
         }
         else if (m == 4)
         {
             root_powers_[1] = { 0, 1 };
-            inv_root_powers_[1] = { 0, -1 };
+            host_inv_root_power[1] = { 0, -1 };
         }
+        inv_root_powers_ = host_inv_root_power;
 
         complex_arith_ = ComplexArith();
         fft_handler_ = FFTHandler(complex_arith_);
     }
 
-    template <
-            typename T, typename = std::enable_if_t<
-                    std::is_same<std::remove_cv_t<T>, double>::value ||
-                    std::is_same<std::remove_cv_t<T>, std::complex<double>>::value>>
-    void CKKSEncoder::encode_internal(
-            const T *values, std::size_t values_size, parms_id_type parms_id, double scale, Plaintext &destination,
+    __global__ void g_set_conj_values_complex(
+            const cuDoubleComplex* values,
+            size_t values_size,
+            size_t slots,
+            cuDoubleComplex* conj_values,
+            const uint64_t* matrix_reps_index_map
+    ) {
+        GET_INDEX_COND_RETURN(values_size);
+        auto value = values[gindex];
+        conj_values[matrix_reps_index_map[gindex]] = value;
+        conj_values[matrix_reps_index_map[gindex + slots]] = cuConj(value);
+    }
+
+    __global__ void g_set_conj_values_double(
+            const double* values,
+            size_t values_size,
+            size_t slots,
+            cuDoubleComplex* conj_values,
+            const uint64_t* matrix_reps_index_map
+    ) {
+        GET_INDEX_COND_RETURN(values_size);
+        auto value = values[gindex];
+        conj_values[matrix_reps_index_map[gindex]] = {value, 0};
+        conj_values[matrix_reps_index_map[gindex + slots]] = {value, -0};
+    }
+
+    void set_conj_values(
+            const complex<double>* values,
+            size_t values_size,
+            const size_t slots,
+            cuDoubleComplex* conj_values,
+            const uint64_t* matrix_reps_index_map
+    ) {
+        auto device_values = util::DeviceArray<complex<double>>(values_size);
+        KernelProvider::copy(device_values.get(), values, values_size);
+        KERNEL_CALL(g_set_conj_values_complex, slots)(
+                reinterpret_cast<const cuDoubleComplex *>(device_values.get()),
+                values_size,
+                slots,
+                conj_values,
+                matrix_reps_index_map
+        );
+    }
+
+    void set_conj_values(
+            const double* values,
+            size_t values_size,
+            size_t slots,
+            cuDoubleComplex* conj_values,
+            const uint64_t* matrix_reps_index_map
+    ) {
+        auto device_values = util::DeviceArray<double>(values_size);
+        KernelProvider::copy(device_values.get(), values, values_size);
+        KERNEL_CALL(g_set_conj_values_double, slots)(
+                device_values.get(),
+                values_size,
+                slots,
+                conj_values,
+                matrix_reps_index_map
+        );
+    }
+
+    __global__ void gFftTransferFromRevLayered(
+            size_t layer,
+            cuDoubleComplex* operand,
+            size_t poly_modulus_degree_power,
+            const cuDoubleComplex * roots
+    ) {
+        GET_INDEX_COND_RETURN(1 << (poly_modulus_degree_power - 1));
+        size_t m = 1 << (poly_modulus_degree_power - 1 - layer);
+        size_t gap = 1 << layer;
+        size_t rid = (1 << poly_modulus_degree_power) - (m << 1) + 1 + (gindex >> layer);
+        size_t coeff_index = ((gindex >> layer) << (layer + 1)) + (gindex & (gap - 1));
+
+        cuDoubleComplex &x = operand[coeff_index];
+        cuDoubleComplex &y = operand[coeff_index + gap];
+
+        double ur = x.x, ui = x.y, vr = y.x, vi = y.y;
+        double rr = roots[rid].x, ri = roots[rid].y;
+
+        // x = u + v
+        x.x = ur + vr;
+        x.y = ui + vi;
+
+        // y = (u-v) * r
+        ur -= vr; ui -= vi; // u <- u - v
+        y.x = ur * rr - ui * ri;
+        y.y = ur * ri + ui * rr;
+    }
+
+    __global__ void gMultiplyScalar(
+            cuDoubleComplex *operand,
+            size_t n,
+            double scalar
+    ) {
+        GET_INDEX_COND_RETURN(n);
+        operand[gindex].x *= scalar;
+        operand[gindex].y *= scalar;
+    }
+
+    void kFftTransferFromRev(
+            cuDoubleComplex* operand,
+            size_t poly_modulus_degree_power,
+            const cuDoubleComplex* roots,
+            double fix = 1
+    ) {
+        std::size_t n = size_t(1) << poly_modulus_degree_power;
+        std::size_t m = n >> 1; std::size_t layer = 0;
+        for(; m >= 1; m >>= 1) {
+            KERNEL_CALL(gFftTransferFromRevLayered, n >> 1)(
+                    layer,
+                    operand,
+                    poly_modulus_degree_power,
+                    roots
+            );
+            layer++;
+        }
+        if (fix != 1) {
+            KERNEL_CALL(gMultiplyScalar, n)(operand, n, fix);
+        }
+    }
+
+    __global__ void findMax(cuDoubleComplex* d_array, size_t size, double* result) {
+        int tid = blockIdx.x * blockDim.x + threadIdx.x;
+        if (tid >= size) {
+            return;
+        }
+
+        int stride = blockDim.x * gridDim.x;
+
+        double localMax = -DBL_MAX;
+
+        for (int i = tid; i < size; i += stride) {
+            if (d_array[i].x > localMax) {
+                localMax = d_array[i].x;
+            }
+        }
+
+        // 存储局部最大值到共享内存
+        __shared__ double s_max[256]; // 256是一个线程块的最大数量
+        s_max[threadIdx.x] = localMax;
+        __syncthreads();
+
+        // 在每个线程块内查找局部最大值
+        int s = blockDim.x / 2;
+        while (s > 0) {
+            if (threadIdx.x < s) {
+                if (fabs(s_max[threadIdx.x]) < fabs(s_max[threadIdx.x + s])) {
+                    s_max[threadIdx.x] = fabs(s_max[threadIdx.x + s]);
+                }
+            }
+            __syncthreads();
+            s /= 2;
+        }
+
+        // 第一个线程块的线程将局部最大值存储在全局结果中
+        if (threadIdx.x == 0) {
+            result[blockIdx.x] = s_max[0];
+        }
+    }
+
+    __global__ void gEncodeInternalComplexArrayUtilA(
+            cuDoubleComplex* conj_values,
+            size_t n,
+            size_t coeff_modulus_size,
+            const Modulus* coeff_modulus,
+            uint64_t* destination
+    ) {
+        GET_INDEX_COND_RETURN(n);
+        double coeffd = round(conj_values[gindex].x);
+        bool is_negative = coeffd < 0;
+        uint64_t coeffu = static_cast<uint64_t>(abs(coeffd));
+        FOR_N(j, coeff_modulus_size) {
+            if (is_negative) {
+                destination[gindex + j * n] = kernel_util::dNegateUintMod(
+                        kernel_util::dBarrettReduce64(coeffu, coeff_modulus[j]), coeff_modulus[j]
+                );
+            } else {
+                destination[gindex + j * n] = kernel_util::dBarrettReduce64(coeffu, coeff_modulus[j]);
+            }
+        }
+    }
+
+    __global__ void gEncodeInternalComplexArrayUtilB(
+            cuDoubleComplex* conj_values,
+            size_t n,
+            size_t coeff_modulus_size,
+            const Modulus* coeff_modulus,
+            uint64_t* destination
+    ) {
+        GET_INDEX_COND_RETURN(n);
+        double two_pow_64 = pow(2.0, 64);
+        double coeffd = round(conj_values[gindex].x);
+        bool is_negative = coeffd < 0;
+        coeffd = fabs(coeffd);
+        uint64_t coeffu[2] = {
+                static_cast<uint64_t>(fmod(coeffd, two_pow_64)),
+                static_cast<uint64_t>(coeffd / two_pow_64),
+        };
+        FOR_N(j, coeff_modulus_size) {
+            if (is_negative) {
+                destination[gindex + j * n] = kernel_util::dNegateUintMod(
+                        kernel_util::dBarrettReduce128(coeffu, coeff_modulus[j]), coeff_modulus[j]
+                );
+            } else {
+                destination[gindex + j * n] = kernel_util::dBarrettReduce128(coeffu, coeff_modulus[j]);
+            }
+        }
+    }
+
+    template <typename T, typename>
+//    template <
+//            typename T, typename = std::enable_if_t<
+//                    std::is_same<std::remove_cv_t<T>, double>::value ||
+//                    std::is_same<std::remove_cv_t<T>, std::complex<double>>::value>>
+    void CKKSEncoder::encode_internal_cu(
+            const T *values, size_t values_size, parms_id_type parms_id, double scale, Plaintext &destination,
             MemoryPoolHandle pool) const
     {
         // Verify parameters.
@@ -101,7 +319,7 @@ namespace sigma
 
         auto &context_data = *context_data_ptr;
         auto &parms = context_data.parms();
-        auto &coeff_modulus = parms.coeff_modulus();
+        auto &coeff_modulus = parms.device_coeff_modulus();
         std::size_t coeff_modulus_size = coeff_modulus.size();
         std::size_t coeff_count = parms.poly_modulus_degree();
 
@@ -117,26 +335,40 @@ namespace sigma
             throw std::invalid_argument("scale out of bounds");
         }
 
-        auto ntt_tables = context_data.small_ntt_tables();
+        auto ntt_tables = context_data.device_small_ntt_tables();
 
         // values_size is guaranteed to be no bigger than slots_
         std::size_t n = util::mul_safe(slots_, std::size_t(2));
 
-        auto conj_values = util::allocate<std::complex<double>>(n, pool, 0);
-        for (std::size_t i = 0; i < values_size; i++)
-        {
-            conj_values[matrix_reps_index_map_[i]] = values[i];
-            // TODO: if values are real, the following values should be set to zero, and multiply results by 2.
-            conj_values[matrix_reps_index_map_[i + slots_]] = std::conj(values[i]);
-        }
+        auto device_conj_values = kernel_util::kAllocateZero<cuDoubleComplex>(n);
+        auto device_values = util::DeviceArray<double>(values_size);
+
+        set_conj_values(values, values_size, slots_, device_conj_values.get(), matrix_reps_index_map_.get());
+
         double fix = scale / static_cast<double>(n);
-        fft_handler_.transform_from_rev(conj_values.get(), util::get_power_of_two(n), inv_root_powers_.get(), &fix);
+        kFftTransferFromRev(
+                device_conj_values.get(),
+                util::get_power_of_two(n),
+                inv_root_powers_.get(),
+                fix);
 
         double max_coeff = 0;
-        for (std::size_t i = 0; i < n; i++)
         {
-            max_coeff = std::max<>(max_coeff, std::fabs(conj_values[i].real()));
+            size_t block_count = kernel_util::ceilDiv_(n, 256);
+            int sharedMemSize = 256 * sizeof(double);
+            double* d_result; // 用于存储每个线程块的局部最大值
+            double h_result[block_count];
+            cudaMalloc((void**)&d_result, sizeof(double) * block_count);
+            findMax<<<block_count, 256, sharedMemSize>>>(device_conj_values.get(), n, d_result);
+            cudaMemcpy(h_result, d_result, sizeof(double) * block_count, cudaMemcpyDeviceToHost);
+            for (int i = 0; i < block_count; i++) {
+                if (h_result[i] > max_coeff) {
+                    max_coeff = h_result[i];
+                }
+            }
+            cudaFree(d_result);
         }
+
         // Verify that the values are not too large to fit in coeff_modulus
         // Note that we have an extra + 1 for the sign bit
         // Don't compute logarithmis of numbers less than 1
@@ -152,108 +384,43 @@ namespace sigma
         // Need to first set parms_id to zero, otherwise resize
         // will throw an exception.
         destination.parms_id() = parms_id_zero;
-        destination.resize(util::mul_safe(coeff_count, coeff_modulus_size));
+
+        auto dest_size = util::mul_safe(coeff_count, coeff_modulus_size);
+
+        auto dest_arr = DeviceArray<uint64_t>(dest_size);
 
         // Use faster decomposition methods when possible
         if (max_coeff_bit_count <= 64)
         {
-            for (std::size_t i = 0; i < n; i++)
-            {
-                double coeffd = std::round(conj_values[i].real());
-                bool is_negative = std::signbit(coeffd);
-
-                std::uint64_t coeffu = static_cast<std::uint64_t>(std::fabs(coeffd));
-
-                if (is_negative)
-                {
-                    for (std::size_t j = 0; j < coeff_modulus_size; j++)
-                    {
-                        destination[i + (j * coeff_count)] = util::negate_uint_mod(
-                                util::barrett_reduce_64(coeffu, coeff_modulus[j]), coeff_modulus[j]);
-                    }
-                }
-                else
-                {
-                    for (std::size_t j = 0; j < coeff_modulus_size; j++)
-                    {
-                        destination[i + (j * coeff_count)] = util::barrett_reduce_64(coeffu, coeff_modulus[j]);
-                    }
-                }
-            }
+            KERNEL_CALL(gEncodeInternalComplexArrayUtilA, n) (
+                    device_conj_values.get(),
+                    n, coeff_modulus_size,
+                    coeff_modulus.get(),
+                    // TODO: wangshuchao
+                    dest_arr.get()
+            );
         }
         else if (max_coeff_bit_count <= 128)
         {
-            for (std::size_t i = 0; i < n; i++)
-            {
-                double coeffd = std::round(conj_values[i].real());
-                bool is_negative = std::signbit(coeffd);
-                coeffd = std::fabs(coeffd);
-
-                std::uint64_t coeffu[2]{ static_cast<std::uint64_t>(std::fmod(coeffd, two_pow_64)),
-                                         static_cast<std::uint64_t>(coeffd / two_pow_64) };
-
-                if (is_negative)
-                {
-                    for (std::size_t j = 0; j < coeff_modulus_size; j++)
-                    {
-                        destination[i + (j * coeff_count)] = util::negate_uint_mod(
-                                util::barrett_reduce_128(coeffu, coeff_modulus[j]), coeff_modulus[j]);
-                    }
-                }
-                else
-                {
-                    for (std::size_t j = 0; j < coeff_modulus_size; j++)
-                    {
-                        destination[i + (j * coeff_count)] = util::barrett_reduce_128(coeffu, coeff_modulus[j]);
-                    }
-                }
-            }
+            KERNEL_CALL(gEncodeInternalComplexArrayUtilB, n) (
+                    device_conj_values.get(),
+                    n,
+                    coeff_modulus_size,
+                    coeff_modulus.get(),
+                    dest_arr.get()
+            );
         }
         else
         {
             // Slow case
-            auto coeffu(util::allocate_uint(coeff_modulus_size, pool));
-            for (std::size_t i = 0; i < n; i++)
-            {
-                double coeffd = std::round(conj_values[i].real());
-                bool is_negative = std::signbit(coeffd);
-                coeffd = std::fabs(coeffd);
-
-                // We are at this point guaranteed to fit in the allocated space
-                util::set_zero_uint(coeff_modulus_size, coeffu.get());
-                auto coeffu_ptr = coeffu.get();
-                while (coeffd >= 1)
-                {
-                    *coeffu_ptr++ = static_cast<std::uint64_t>(std::fmod(coeffd, two_pow_64));
-                    coeffd /= two_pow_64;
-                }
-
-                // Next decompose this coefficient
-                context_data.rns_tool()->base_q()->decompose(coeffu.get(), pool);
-
-                // Finally replace the sign if necessary
-                if (is_negative)
-                {
-                    for (std::size_t j = 0; j < coeff_modulus_size; j++)
-                    {
-                        destination[i + (j * coeff_count)] = util::negate_uint_mod(coeffu[j], coeff_modulus[j]);
-                    }
-                }
-                else
-                {
-                    for (std::size_t j = 0; j < coeff_modulus_size; j++)
-                    {
-                        destination[i + (j * coeff_count)] = coeffu[j];
-                    }
-                }
-            }
+            throw std::invalid_argument("not support");
         }
 
         // Transform to NTT domain
-        for (std::size_t i = 0; i < coeff_modulus_size; i++)
-        {
-            util::ntt_negacyclic_harvey(destination.data(i * coeff_count), ntt_tables[i]);
-        }
+        kernel_util::kNttNegacyclicHarvey(dest_arr.get(), 1, coeff_modulus_size, util::get_power_of_two(n), ntt_tables);
+
+        destination.resize(dest_size);
+        cudaMemcpy(destination.data(), dest_arr.get(), dest_size * sizeof(uint64_t), cudaMemcpyDeviceToHost);
 
         destination.parms_id() = parms_id;
         destination.scale() = scale;
@@ -455,5 +622,15 @@ namespace sigma
 
         destination.parms_id() = parms_id;
         destination.scale() = 1.0;
+    }
+
+    void CKKSEncoder::encode_internal(const double *values, size_t values_size, parms_id_type parms_id, double scale,
+                                      Plaintext &destination, MemoryPoolHandle pool) const {
+        encode_internal_cu(values, values_size, parms_id, scale, destination, pool);
+    }
+
+    void CKKSEncoder::encode_internal(const std::complex<double> *values, size_t values_size, parms_id_type parms_id,
+                                      double scale, Plaintext &destination, MemoryPoolHandle pool) const {
+        encode_internal_cu(values, values_size, parms_id, scale, destination, pool);
     }
 } // namespace sigma

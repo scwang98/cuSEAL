@@ -11,6 +11,7 @@
 #include "sigma/util/dwthandler.h"
 #include "sigma/util/uintarithsmallmod.h"
 #include "sigma/util/uintcore.h"
+#include "cuComplex.h"
 #include <cmath>
 #include <complex>
 #include <limits>
@@ -440,13 +441,20 @@ namespace sigma
             return slots_;
         }
 
+        void encode_internal(
+                const double *values, size_t values_size, parms_id_type parms_id, double scale, Plaintext &destination,
+                MemoryPoolHandle pool) const;
+        void encode_internal(
+                const std::complex<double> *values, size_t values_size, parms_id_type parms_id, double scale, Plaintext &destination,
+                MemoryPoolHandle pool) const;
+
     private:
         template <
             typename T, typename = std::enable_if_t<
                             std::is_same<std::remove_cv_t<T>, double>::value ||
                             std::is_same<std::remove_cv_t<T>, std::complex<double>>::value>>
-        void encode_internal(
-            const T *values, std::size_t values_size, parms_id_type parms_id, double scale, Plaintext &destination,
+        void encode_internal_cu(
+            const T *values, size_t values_size, parms_id_type parms_id, double scale, Plaintext &destination,
             MemoryPoolHandle pool) const;
 
         template <
@@ -557,7 +565,8 @@ namespace sigma
 
             for (std::size_t i = 0; i < slots_; i++)
             {
-                destination[i] = from_complex<T>(res[static_cast<std::size_t>(matrix_reps_index_map_[i])]);
+                // TODO: adapt with cuda @wangshuchao
+                destination[i] = from_complex<T>(res[static_cast<std::size_t>(matrix_reps_index_map_.get()[i])]);
             }
         }
 
@@ -586,9 +595,9 @@ namespace sigma
         util::Pointer<std::complex<double>> root_powers_;
 
         // Holds 1~(n-1)-th powers of inverse root in scrambled order, the 0-th power is left unset.
-        util::Pointer<std::complex<double>> inv_root_powers_;
+        util::DeviceArray<cuDoubleComplex> inv_root_powers_;
 
-        util::Pointer<std::size_t> matrix_reps_index_map_;
+        util::DeviceArray<std::size_t> matrix_reps_index_map_;
 
         ComplexArith complex_arith_;
 
