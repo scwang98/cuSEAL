@@ -265,7 +265,7 @@ namespace sigma
 #endif
 
             // Populate tables with powers of root in specific orders.
-            root_powers_ = allocate<MultiplyUIntModOperand>(coeff_count_, pool_);
+            root_powers_ = HostArray<MultiplyUIntModOperand>(coeff_count_);
             MultiplyUIntModOperand root;
             root.set(root_, modulus_);
             uint64_t power = root_;
@@ -276,7 +276,7 @@ namespace sigma
             }
             root_powers_[0].set(static_cast<uint64_t>(1), modulus_);
 
-            inv_root_powers_ = allocate<MultiplyUIntModOperand>(coeff_count_, pool_);
+            inv_root_powers_ = HostArray<MultiplyUIntModOperand>(coeff_count_);
             root.set(inv_root_, modulus_);
             power = inv_root_;
             for (size_t i = 1; i < coeff_count_; i++)

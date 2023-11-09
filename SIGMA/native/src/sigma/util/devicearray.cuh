@@ -181,13 +181,8 @@ namespace sigma::util {
 
         DeviceArray(const HostArray<T> &host) {
             len = host.length();
-            data = reinterpret_cast<T *>(MemoryPoolCuda::Get(len * sizeof(T)));
-            KernelProvider::copy<T>(data, host.get(), len);
-        }
-
-        DeviceArray(const Pointer<T> &host) {
-            data = reinterpret_cast<T *>(MemoryPoolCuda::Get(host.head_->item_byte_count()));
-            KernelProvider::copy<T>(data, host.get(), len);
+            cudaMalloc((void**)&data, len * sizeof(T));
+            cudaMemcpy(data, host.get(), len * sizeof(T), cudaMemcpyHostToDevice);
         }
 
         ~DeviceArray() {

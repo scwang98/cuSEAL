@@ -290,10 +290,6 @@ namespace sigma
     }
 
     template <typename T, typename>
-//    template <
-//            typename T, typename = std::enable_if_t<
-//                    std::is_same<std::remove_cv_t<T>, double>::value ||
-//                    std::is_same<std::remove_cv_t<T>, std::complex<double>>::value>>
     void CKKSEncoder::encode_internal_cu(
             const T *values, size_t values_size, parms_id_type parms_id, double scale, Plaintext &destination,
             MemoryPoolHandle pool) const

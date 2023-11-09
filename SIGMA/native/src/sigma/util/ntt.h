@@ -79,8 +79,8 @@ namespace sigma
                 : pool_(copy.pool_), root_(copy.root_), coeff_count_power_(copy.coeff_count_power_),
                   coeff_count_(copy.coeff_count_), modulus_(copy.modulus_), inv_degree_modulo_(copy.inv_degree_modulo_)
             {
-                root_powers_ = allocate<MultiplyUIntModOperand>(coeff_count_, pool_);
-                inv_root_powers_ = allocate<MultiplyUIntModOperand>(coeff_count_, pool_);
+                root_powers_ = HostArray<MultiplyUIntModOperand>(coeff_count_);
+                inv_root_powers_ = HostArray<MultiplyUIntModOperand>(coeff_count_);
 
                 std::copy_n(copy.root_powers_.get(), coeff_count_, root_powers_.get());
                 std::copy_n(copy.inv_root_powers_.get(), coeff_count_, inv_root_powers_.get());
@@ -173,10 +173,10 @@ namespace sigma
             MultiplyUIntModOperand inv_degree_modulo_;
 
             // Holds 1~(n-1)-th powers of root_ in bit-reversed order, the 0-th power is left unset.
-            Pointer<MultiplyUIntModOperand> root_powers_;
+            HostArray<MultiplyUIntModOperand> root_powers_;
 
             // Holds 1~(n-1)-th powers of inv_root_ in scrambled order, the 0-th power is left unset.
-            Pointer<MultiplyUIntModOperand> inv_root_powers_;
+            HostArray<MultiplyUIntModOperand> inv_root_powers_;
 
             ModArithLazy mod_arith_lazy_;
 
