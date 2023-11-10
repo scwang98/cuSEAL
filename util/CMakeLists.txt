@@ -1,0 +1,10 @@
+# Copyright (c) Microsoft Corporation. All rights reserved.
+# Licensed under the MIT license.
+
+# Source files in this directory
+set(CUSEAL_UTIL_FILES ${CUSEAL_UTIL_FILES}
+        ${CMAKE_CURRENT_LIST_DIR}/configmanager.h
+        ${CMAKE_CURRENT_LIST_DIR}/configmanager.cpp
+)
+
+set(CUSEAL_UTIL_FILES ${CUSEAL_UTIL_FILES} PARENT_SCOPE)
