@@ -12,8 +12,6 @@
 
 namespace util {
 
-//    namespace Json { class Value; }
-
     class ConfigManager {
 
     public:

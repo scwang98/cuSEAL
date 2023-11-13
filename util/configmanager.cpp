@@ -8,7 +8,7 @@
 
 namespace util {
 
-    std::string config_path = "../config.json";
+    std::string config_path = "../data/config.json";
 
     ConfigManager ConfigManager::singleton;
 
