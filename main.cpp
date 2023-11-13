@@ -1,6 +1,6 @@
 
 #include "sigma/kernelprovider.h"
-#include "utils.h"
+#include "util/vectorutil.h"
 
 #include <sigma/sigma.h>
 #include <iostream>
@@ -13,7 +13,7 @@ int main() {
 
     sigma::KernelProvider::initialize();
 
-    auto gallery_data = read_npy_data(FILE_STORE_PATH + "gallery_x.npy");
+    auto gallery_data = util::read_npy_data(FILE_STORE_PATH + "gallery_x.npy");
     gallery_data.assign(gallery_data.begin(), gallery_data.begin() + GALLERY_SIZE);
 
     size_t poly_modulus_degree = 8192;
@@ -22,7 +22,9 @@ int main() {
     sigma::EncryptionParameters params(sigma::scheme_type::ckks);
     params.set_poly_modulus_degree(poly_modulus_degree);
     params.set_coeff_modulus(sigma::CoeffModulus::BFVDefault(poly_modulus_degree));
+    params.setup_device_params(); // 初始化device相关参数
     sigma::SIGMAContext context(params);
+//    context.setup_device_params(); // 初始化device相关参数
     sigma::CKKSEncoder encoder(context);
 
     std::cout << "GPU Encode begins" << std::endl;
@@ -30,6 +32,7 @@ int main() {
     for (size_t i = 0; i < gallery_data.size(); i++) {
         sigma::Plaintext plain_vec;
         encoder.encode(gallery_data[i], scale, plain_vec);
+        std::cout << "[" << i << "]=" << plain_vec[i] << std::endl;
     }
     auto gpu_end = std::chrono::high_resolution_clock::now();
     auto gpu_duration = std::chrono::duration_cast<std::chrono::milliseconds>(gpu_end - gpu_start);
