@@ -26,7 +26,6 @@ set(SIGMA_SOURCE_FILES ${SIGMA_SOURCE_FILES}
         ${CMAKE_CURRENT_LIST_DIR}/uintarithsmallmod.cpp
         ${CMAKE_CURRENT_LIST_DIR}/uintcore.cpp
         ${CMAKE_CURRENT_LIST_DIR}/ztools.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/memorypool_cuda.cu
 )
 
 # Add header files for installation
@@ -66,7 +65,6 @@ install(
         ${CMAKE_CURRENT_LIST_DIR}/ztools.h
         ${CMAKE_CURRENT_LIST_DIR}/devicearray.cuh
         ${CMAKE_CURRENT_LIST_DIR}/hostarray.h
-        ${CMAKE_CURRENT_LIST_DIR}/memorypool_cuda.h
         DESTINATION
         ${SIGMA_INCLUDES_INSTALL_DIR}/sigma/util
 )

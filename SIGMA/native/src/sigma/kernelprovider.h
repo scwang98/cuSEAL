@@ -35,7 +35,9 @@ namespace sigma {
         template<typename T>
         static void free(T *pointer) {
             checkInitialized();
-            cudaFree(pointer);
+            auto status = cudaFree(pointer);
+            if (status != cudaSuccess)
+                throw std::runtime_error("Cuda free failed.");
         }
 
         template<typename T>

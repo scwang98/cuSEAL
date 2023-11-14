@@ -241,11 +241,8 @@ namespace sigma
         try
         {
             CreateNTTTables(coeff_count_power, coeff_modulus, context_data.small_ntt_tables_, pool_);
-            auto host = HostArray<CUNTTTables>(coeff_modulus_size);
-            for (size_t i = 0; i < coeff_modulus_size; i++) {
-                host[i] = context_data.small_ntt_tables_[i];
-            }
-            context_data.device_small_ntt_tables_ = DeviceArray(host);
+            // TODO: remove @wangshuchao
+            context_data.device_small_ntt_tables_ = DeviceArray(context_data.small_ntt_tables_.get(), coeff_modulus_size, true);
         }
         catch (const invalid_argument &)
         {

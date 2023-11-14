@@ -202,6 +202,7 @@ namespace sigma
             }
 
             coeff_modulus_ = coeff_modulus;
+            // TODO: remove @wangshuchao
             auto host_array = util::HostArray(coeff_modulus.data(), coeff_modulus.size());
             device_coeff_modulus_ = util::DeviceArray(host_array);
 

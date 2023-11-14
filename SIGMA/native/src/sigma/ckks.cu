@@ -352,17 +352,16 @@ namespace sigma
         {
             size_t block_count = kernel_util::ceilDiv_(n, 256);
             int sharedMemSize = 256 * sizeof(double);
-            double* d_result; // 用于存储每个线程块的局部最大值
+            double* d_result = KernelProvider::malloc<double>(block_count); // 用于存储每个线程块的局部最大值
             double h_result[block_count];
-            cudaMalloc((void**)&d_result, sizeof(double) * block_count);
             findMax<<<block_count, 256, sharedMemSize>>>(device_conj_values.get(), n, d_result);
-            cudaMemcpy(h_result, d_result, sizeof(double) * block_count, cudaMemcpyDeviceToHost);
+            KernelProvider::retrieve(h_result, d_result, block_count);
             for (int i = 0; i < block_count; i++) {
                 if (h_result[i] > max_coeff) {
                     max_coeff = h_result[i];
                 }
             }
-            cudaFree(d_result);
+            KernelProvider::free(d_result);
         }
 
         // Verify that the values are not too large to fit in coeff_modulus
@@ -383,7 +382,7 @@ namespace sigma
 
         auto dest_size = util::mul_safe(coeff_count, coeff_modulus_size);
 
-        auto dest_arr = DeviceArray<uint64_t>(dest_size);
+        DeviceArray<uint64_t> dest_arr(dest_size);
 
         // Use faster decomposition methods when possible
         if (max_coeff_bit_count <= 64)

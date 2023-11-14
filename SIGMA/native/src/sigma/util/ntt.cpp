@@ -275,6 +275,7 @@ namespace sigma
                 power = multiply_uint_mod(power, root, modulus_);
             }
             root_powers_[0].set(static_cast<uint64_t>(1), modulus_);
+            device_root_powers_ = DeviceArray(root_powers_);
 
             inv_root_powers_ = HostArray<MultiplyUIntModOperand>(coeff_count_);
             root.set(inv_root_, modulus_);
@@ -285,6 +286,7 @@ namespace sigma
                 power = multiply_uint_mod(power, root, modulus_);
             }
             inv_root_powers_[0].set(static_cast<uint64_t>(1), modulus_);
+            device_inv_root_powers_ = DeviceArray(inv_root_powers_);
 
             // Compute n^(-1) modulo q.
             uint64_t degree_uint = static_cast<uint64_t>(coeff_count_);

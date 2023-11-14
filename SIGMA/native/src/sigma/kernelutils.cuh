@@ -3,7 +3,7 @@
 #include "util/devicearray.cuh"
 #include "util/hostarray.h"
 #include "util/uintarithsmallmod.h"
-#include "util/ntt_cuda.cuh"
+#include "util/ntt.h"
 #include "modulus.h"
 
 #define KERNEL_CALL(funcname, n) size_t block_count = kernel_util::ceilDiv_(n, 256); funcname<<<block_count, 256>>>
@@ -35,7 +35,6 @@ namespace sigma {
         using MPointer = ConstDevicePointer<Modulus>;
         using sigma::util::MultiplyUIntModOperand;
         using uint128_t = unsigned __int128;
-        using sigma::util::CUNTTTables;
 
         inline util::DeviceArray<uint64_t> kAllocate(uint64_t s) {
             return util::DeviceArray<uint64_t>(s);
@@ -476,12 +475,12 @@ namespace sigma {
         __global__ void gModBoundedUsingNttTables(
                 uint64_t *operand,
                 POLY_ARRAY_ARGUMENTS,
-                const CUNTTTables *ntt_tables);
+                const util::NTTTables *ntt_tables);
 
         void kModBoundedUsingNttTables(
-                DevicePointer<uint64_t> operand,
+                uint64_t *operand,
                 POLY_ARRAY_ARGUMENTS,
-                ConstDevicePointer<CUNTTTables> ntt_tables);
+                ConstDevicePointer<util::NTTTables> ntt_tables);
 
         __global__ void gModuloPolyCoeffs(
                 const uint64_t *operand,
@@ -521,11 +520,11 @@ namespace sigma {
         );
 
         void kNttTransferToRev(
-                DevicePointer<uint64_t> operand,
+                uint64_t *operand,
                 size_t poly_size,
                 size_t coeff_modulus_size,
                 size_t poly_modulus_degree_power,
-                ConstDevicePointer<CUNTTTables> ntt_tables,
+                ConstDevicePointer<util::NTTTables> ntt_tables,
                 bool use_inv_root_powers);
 
         void kNttTransferFromRev(
@@ -533,25 +532,25 @@ namespace sigma {
                 size_t poly_size,
                 size_t coeff_modulus_size,
                 size_t poly_modulus_degree_power,
-                ConstDevicePointer<CUNTTTables> ntt_tables,
+                ConstDevicePointer<util::NTTTables> ntt_tables,
                 bool use_inv_root_powers);
 
         inline void kNttNegacyclicHarveyLazy(
-                DevicePointer<uint64_t> operand,
+                uint64_t *operand,
                 size_t poly_size,
                 size_t coeff_modulus_size,
                 size_t poly_modulus_degree_power,
-                ConstDevicePointer<CUNTTTables> ntt_tables) {
+                ConstDevicePointer<util::NTTTables> ntt_tables) {
             kNttTransferToRev(operand, poly_size, coeff_modulus_size,
                               poly_modulus_degree_power, ntt_tables, false);
         }
 
         inline void kNttNegacyclicHarvey(
-                DevicePointer<uint64_t> operand,
+                uint64_t *operand,
                 size_t poly_size,
                 size_t coeff_modulus_size,
                 size_t poly_modulus_degree_power,
-                ConstDevicePointer<CUNTTTables> ntt_tables) {
+                ConstDevicePointer<util::NTTTables> ntt_tables) {
             kNttNegacyclicHarveyLazy(
                     operand, poly_size, coeff_modulus_size,
                     poly_modulus_degree_power, ntt_tables
@@ -567,17 +566,17 @@ namespace sigma {
                 size_t poly_size,
                 size_t coeff_modulus_size,
                 size_t poly_modulus_degree_power,
-                ConstDevicePointer<CUNTTTables> ntt_tables) {
+                ConstDevicePointer<util::NTTTables> ntt_tables) {
             kNttTransferFromRev(operand, poly_size, coeff_modulus_size,
                                 poly_modulus_degree_power, ntt_tables, true);
         }
 
         inline void kInverseNttNegacyclicHarvey(
-                DevicePointer<uint64_t> operand,
+                uint64_t *operand,
                 size_t poly_size,
                 size_t coeff_modulus_size,
                 size_t poly_modulus_degree_power,
-                ConstDevicePointer<CUNTTTables> ntt_tables) {
+                ConstDevicePointer<util::NTTTables> ntt_tables) {
             kInverseNttNegacyclicHarveyLazy(
                     operand, poly_size, coeff_modulus_size,
                     poly_modulus_degree_power, ntt_tables
@@ -593,17 +592,17 @@ namespace sigma {
                 size_t poly_size,
                 size_t coeff_modulus_size,
                 size_t poly_modulus_degree_power,
-                const CUNTTTables *ntt_tables,
+                const util::NTTTables *ntt_tables,
                 bool use_inv_root_powers
         );
 
         void kNttTransferToRevLayered(
                 size_t layer,
-                DevicePointer<uint64_t> operand,
+                uint64_t *operand,
                 size_t poly_size,
                 size_t coeff_modulus_size,
                 size_t poly_modulus_degree_power,
-                ConstDevicePointer<CUNTTTables> ntt_tables,
+                ConstDevicePointer<util::NTTTables> ntt_tables,
                 bool use_inv_root_powers
         );
 
@@ -613,7 +612,7 @@ namespace sigma {
                 size_t poly_size,
                 size_t coeff_modulus_size,
                 size_t poly_modulus_degree_power,
-                const CUNTTTables *ntt_tables,
+                const util::NTTTables *ntt_tables,
                 bool use_inv_root_powers
         );
 
@@ -623,7 +622,7 @@ namespace sigma {
                 size_t poly_size,
                 size_t coeff_modulus_size,
                 size_t poly_modulus_degree_power,
-                ConstDevicePointer<CUNTTTables> ntt_tables,
+                ConstDevicePointer<util::NTTTables> ntt_tables,
                 bool use_inv_root_powers
         );
 
@@ -670,7 +669,7 @@ namespace sigma {
         );
 
         void kMultiplyInvPolyDegreeCoeffmod(CPointer poly_array, POLY_ARRAY_ARGUMENTS,
-                                            ConstDevicePointer<CUNTTTables> ntt_tables,
+                                            ConstDevicePointer<util::NTTTables> ntt_tables,
                                             MPointer modulus, DevicePointer<uint64_t> result);
 
     }

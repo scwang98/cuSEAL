@@ -4,7 +4,6 @@
 #include "hostarray.h"
 #include "pointer.h"
 #include "../kernelprovider.h"
-#include "memorypool_cuda.h"
 #include "cuda_runtime.h"
 #include <vector>
 #include <exception>
@@ -151,7 +150,7 @@ namespace sigma::util {
         }
 
         DeviceArray(size_t cnt) {
-            data = reinterpret_cast<T *>(MemoryPoolCuda::Get(cnt * sizeof(T)));
+            data = KernelProvider::malloc<T>(cnt);
             len = cnt;
         }
 
@@ -159,9 +158,17 @@ namespace sigma::util {
 
         size_t size() const { return len; }
 
-        // Directly use the given pointer.
-        DeviceArray(T *data, size_t length) :
-                data(data), len(length) {}
+        // 保留bool allocate编译不通过以提醒
+        DeviceArray(T *data, size_t length, bool allocate) {
+            if (allocate) {
+                this->len = length;
+                this->data = KernelProvider::malloc<T>(len);
+                KernelProvider::copy(this->data, data, len);
+            } else {
+                this->data = data;
+                this->len = length;
+            }
+        }
 
         DeviceArray(DeviceArray &&a) {
             data = a.data;
@@ -171,7 +178,9 @@ namespace sigma::util {
         }
 
         DeviceArray &operator=(DeviceArray &&a) {
-            if (data) MemoryPoolCuda::Free(reinterpret_cast<void *>(data), len * sizeof(T));
+            if (data) {
+                KernelProvider::free(data);
+            }
             data = a.data;
             len = a.len;
             a.data = nullptr;
@@ -181,32 +190,40 @@ namespace sigma::util {
 
         DeviceArray(const HostArray<T> &host) {
             len = host.length();
-            cudaMalloc((void**)&data, len * sizeof(T));
-            cudaMemcpy(data, host.get(), len * sizeof(T), cudaMemcpyHostToDevice);
+            data = KernelProvider::malloc<T>(len);
+            KernelProvider::copy(data, host.get(), len);
         }
 
         ~DeviceArray() {
-            if (data) MemoryPoolCuda::Free(reinterpret_cast<void *>(data), len * sizeof(T));
+            if (data) {
+                KernelProvider::free(data);
+            }
         }
 
         DeviceArray copy() const {
-            T *copied = reinterpret_cast<T *>(MemoryPoolCuda::Get(len * sizeof(T)));
+            T *copied = KernelProvider::malloc<T>(len);
             KernelProvider::copyOnDevice<T>(copied, data, len);
             return DeviceArray(copied, len);
         }
 
         DeviceArray &operator=(const DeviceArray &r) {
-            if (data) MemoryPoolCuda::Free(reinterpret_cast<void *>(data), len * sizeof(T));
+            if (data) {
+                KernelProvider::free(data);
+            }
             len = r.len;
-            data = reinterpret_cast<T *>(MemoryPoolCuda::Get(len * sizeof(T)));
+            data = KernelProvider::malloc<T>(len);
             KernelProvider::copyOnDevice<T>(data, r.data, len);
             return *this;
         }
 
         DeviceArray(const DeviceArray &r) {
             len = r.len;
-            data = reinterpret_cast<T *>(MemoryPoolCuda::Get(len * sizeof(T)));
-            KernelProvider::copyOnDevice<T>(data, r.data, len);
+            if (len > 0) {
+                data = KernelProvider::malloc<T>(len);
+                KernelProvider::copyOnDevice<T>(data, r.data, len);
+            } else {
+                data = nullptr;
+            }
         }
 
         HostArray<T> toHost() const {
@@ -215,9 +232,15 @@ namespace sigma::util {
             return HostArray<T>(ret, len);
         }
 
-        T *get() { return data; }
+        __host__ __device__
+        T *get() {
+            return data;
+        }
 
-        const T *get() const { return data; }
+        __host__ __device__
+        const T *get() const {
+            return data;
+        }
 
         DevicePointer<T> asPointer() { return DevicePointer<T>(data); }
 

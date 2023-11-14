@@ -115,6 +115,7 @@ namespace sigma
         /**
         Returns the value of the current Modulus.
         */
+        __host__ __device__
         SIGMA_NODISCARD inline std::uint64_t value() const noexcept
         {
             return value_;

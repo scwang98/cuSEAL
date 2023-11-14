@@ -70,7 +70,6 @@ namespace sigma
         {
             using ModArithLazy = Arithmetic<uint64_t, MultiplyUIntModOperand, MultiplyUIntModOperand>;
             using NTTHandler = DWTHandler<std::uint64_t, MultiplyUIntModOperand, MultiplyUIntModOperand>;
-            friend class CUNTTTables;
 
         public:
             NTTTables(NTTTables &&source) = default;
@@ -84,6 +83,9 @@ namespace sigma
 
                 std::copy_n(copy.root_powers_.get(), coeff_count_, root_powers_.get());
                 std::copy_n(copy.inv_root_powers_.get(), coeff_count_, inv_root_powers_.get());
+
+                device_root_powers_ = DeviceArray(copy.device_root_powers_);
+                device_inv_root_powers_ = DeviceArray(copy.device_inv_root_powers_);
             }
 
             NTTTables(int coeff_count_power, const Modulus &modulus, MemoryPoolHandle pool = MemoryManager::GetPool());
@@ -98,9 +100,19 @@ namespace sigma
                 return root_powers_.get();
             }
 
+            SIGMA_NODISCARD __device__ inline const MultiplyUIntModOperand *get_from_device_root_powers() const
+            {
+                return device_root_powers_.get();
+            }
+
             SIGMA_NODISCARD inline const MultiplyUIntModOperand *get_from_inv_root_powers() const
             {
                 return inv_root_powers_.get();
+            }
+
+            SIGMA_NODISCARD __device__ inline const MultiplyUIntModOperand *get_from_device_inv_root_powers() const
+            {
+                return device_inv_root_powers_.get();
             }
 
             SIGMA_NODISCARD inline MultiplyUIntModOperand get_from_root_powers(std::size_t index) const
@@ -125,11 +137,13 @@ namespace sigma
                 return inv_root_powers_[index];
             }
 
+            __host__ __device__
             SIGMA_NODISCARD inline const MultiplyUIntModOperand &inv_degree_modulo() const
             {
                 return inv_degree_modulo_;
             }
 
+            __host__ __device__
             SIGMA_NODISCARD inline const Modulus &modulus() const
             {
                 return modulus_;
@@ -174,9 +188,11 @@ namespace sigma
 
             // Holds 1~(n-1)-th powers of root_ in bit-reversed order, the 0-th power is left unset.
             HostArray<MultiplyUIntModOperand> root_powers_;
+            DeviceArray<MultiplyUIntModOperand> device_root_powers_;
 
             // Holds 1~(n-1)-th powers of inv_root_ in scrambled order, the 0-th power is left unset.
             HostArray<MultiplyUIntModOperand> inv_root_powers_;
+            DeviceArray<MultiplyUIntModOperand> device_inv_root_powers_;
 
             ModArithLazy mod_arith_lazy_;
 

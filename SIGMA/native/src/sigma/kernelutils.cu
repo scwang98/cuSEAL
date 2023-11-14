@@ -189,7 +189,7 @@ namespace sigma::kernel_util {
     __global__ void gModBoundedUsingNttTables(
             uint64_t *operand,
             POLY_ARRAY_ARGUMENTS,
-            const CUNTTTables *ntt_tables) {
+            const util::NTTTables *ntt_tables) {
         GET_INDEX_COND_RETURN(poly_modulus_degree);
         FOR_N(rns_index, coeff_modulus_size) {
             uint64_t modulus_value = DeviceHelper::getModulusValue(ntt_tables[rns_index].modulus());
@@ -203,11 +203,11 @@ namespace sigma::kernel_util {
     }
 
     void kModBoundedUsingNttTables(
-            DevicePointer<uint64_t> operand,
+            uint64_t *operand,
             POLY_ARRAY_ARGUMENTS,
-            ConstDevicePointer<CUNTTTables> ntt_tables) {
+            ConstDevicePointer<util::NTTTables> ntt_tables) {
         KERNEL_CALL(gModBoundedUsingNttTables, poly_modulus_degree)(
-                operand.get(), POLY_ARRAY_ARGCALL, ntt_tables.get()
+                operand, POLY_ARRAY_ARGCALL, ntt_tables.get()
         );
     }
 
@@ -242,12 +242,12 @@ namespace sigma::kernel_util {
     __global__ void gMultiplyInvDegreeNttTables(
             uint64_t *poly_array,
             POLY_ARRAY_ARGUMENTS,
-            const CUNTTTables *ntt_tables
+            const util::NTTTables *ntt_tables
     ) {
         GET_INDEX_COND_RETURN(poly_modulus_degree);
         FOR_N(rns_index, coeff_modulus_size) {
             const Modulus &modulus = ntt_tables[rns_index].modulus();
-            MultiplyUIntModOperand scalar = ntt_tables[rns_index].invDegreeModulo();
+            MultiplyUIntModOperand scalar = ntt_tables[rns_index].inv_degree_modulo();;
             FOR_N(poly_index, poly_size) {
                 size_t id = (poly_index * coeff_modulus_size + rns_index) * poly_modulus_degree + gindex;
                 poly_array[id] = dMultiplyUintModLazy(poly_array[id], scalar, modulus);
@@ -314,11 +314,11 @@ namespace sigma::kernel_util {
     }
 
     void kNttTransferToRev(
-            DevicePointer<uint64_t> operand,
+            uint64_t *operand,
             size_t poly_size,
             size_t coeff_modulus_size,
             size_t poly_modulus_degree_power,
-            ConstDevicePointer<CUNTTTables> ntt_tables,
+            ConstDevicePointer<util::NTTTables> ntt_tables,
             bool use_inv_root_powers
     ) {
         std::size_t m = 1;
@@ -339,7 +339,7 @@ namespace sigma::kernel_util {
             size_t poly_size,
             size_t coeff_modulus_size,
             size_t poly_modulus_degree_power,
-            ConstDevicePointer<CUNTTTables> ntt_tables,
+            ConstDevicePointer<util::NTTTables> ntt_tables,
             bool use_inv_root_powers
     ) {
         std::size_t n = size_t(1) << poly_modulus_degree_power;
@@ -364,7 +364,7 @@ namespace sigma::kernel_util {
             size_t poly_size,
             size_t coeff_modulus_size,
             size_t poly_modulus_degree_power,
-            const CUNTTTables* ntt_tables,
+            const util::NTTTables* ntt_tables,
             bool use_inv_root_powers
     ) {
         GET_INDEX_COND_RETURN(1 << (poly_modulus_degree_power - 1));
@@ -373,21 +373,13 @@ namespace sigma::kernel_util {
         size_t gap = 1 << gap_power;
         size_t rid = m + (gindex >> gap_power);
         size_t coeff_index = ((gindex >> gap_power) << (gap_power + 1)) + (gindex & (gap - 1));
-        // printf("m = %lu, coeff_index = %lu\n", m, coeff_index);
         uint64_t u, v;
-        // FOR_N(rns_index, coeff_modulus_size) {
-        //     // printf("rns index = %ld\n", rns_index);
-        //     for (size_t i = 0; i < (1<<poly_modulus_degree_power); i++) {
-        //         MultiplyUIntModOperand r = ntt_tables[rns_index].getFromInvRootPowers()[i];
-        //         // printf("rootpowers[%lu] = (%llu, %llu)\n", i, r.operand, r.quotient);
-        //     }
-        // }
         FOR_N(rns_index, coeff_modulus_size) {
             const Modulus &modulus = ntt_tables[rns_index].modulus();
             uint64_t two_times_modulus = DeviceHelper::getModulusValue(modulus) << 1;
             MultiplyUIntModOperand r = use_inv_root_powers ?
-                                       (ntt_tables[rns_index].getFromInvRootPowers()[rid]) :
-                                       (ntt_tables[rns_index].getFromRootPowers()[rid]);
+                                       (ntt_tables[rns_index].get_from_device_inv_root_powers()[rid]) :
+                                       (ntt_tables[rns_index].get_from_device_root_powers()[rid]);
             FOR_N(poly_index, poly_size) {
                 uint64_t *x = operand + ((poly_index * coeff_modulus_size + rns_index) << poly_modulus_degree_power) +
                               coeff_index;
@@ -404,16 +396,16 @@ namespace sigma::kernel_util {
 
     void kNttTransferToRevLayered(
             size_t layer,
-            DevicePointer<uint64_t> operand,
+            uint64_t *operand,
             size_t poly_size,
             size_t coeff_modulus_size,
             size_t poly_modulus_degree_power,
-            ConstDevicePointer<CUNTTTables> ntt_tables,
+            ConstDevicePointer<util::NTTTables> ntt_tables,
             bool use_inv_root_powers
     ) {
         std::size_t n = size_t(1) << poly_modulus_degree_power;
         KERNEL_CALL(gNttTransferToRevLayered, n)(
-                layer, operand.get(), poly_size, coeff_modulus_size,
+                layer, operand, poly_size, coeff_modulus_size,
                 poly_modulus_degree_power, ntt_tables.get(),
                 use_inv_root_powers
         );
@@ -425,7 +417,7 @@ namespace sigma::kernel_util {
             size_t poly_size,
             size_t coeff_modulus_size,
             size_t poly_modulus_degree_power,
-            const CUNTTTables *ntt_tables,
+            const util::NTTTables *ntt_tables,
             bool use_inv_root_powers
     ) {
         GET_INDEX_COND_RETURN(1 << (poly_modulus_degree_power - 1));
@@ -436,19 +428,12 @@ namespace sigma::kernel_util {
         size_t coeff_index = ((gindex >> gap_power) << (gap_power + 1)) + (gindex & (gap - 1));
         // printf("m = %lu, coeff_index = %lu\n", m, coeff_index);
         uint64_t u, v;
-        // FOR_N(rns_index, coeff_modulus_size) {
-        //     // printf("rns index = %ld\n", rns_index);
-        //     for (size_t i = 0; i < (1<<poly_modulus_degree_power); i++) {
-        //         MultiplyUIntModOperand r = ntt_tables[rns_index].getFromInvRootPowers()[i];
-        //         // printf("rootpowers[%lu] = (%llu, %llu)\n", i, r.operand, r.quotient);
-        //     }
-        // }
         FOR_N(rns_index, coeff_modulus_size) {
             const Modulus &modulus = ntt_tables[rns_index].modulus();
             uint64_t two_times_modulus = DeviceHelper::getModulusValue(modulus) << 1;
             MultiplyUIntModOperand r = use_inv_root_powers ?
-                                       (ntt_tables[rns_index].getFromInvRootPowers()[rid]) :
-                                       (ntt_tables[rns_index].getFromRootPowers()[rid]);
+                                       (ntt_tables[rns_index].get_from_device_inv_root_powers()[rid]) :
+                                       (ntt_tables[rns_index].get_from_device_root_powers()[rid]);
             FOR_N(poly_index, poly_size) {
                 uint64_t *x = operand + ((poly_index * coeff_modulus_size + rns_index) << poly_modulus_degree_power) +
                               coeff_index;
@@ -471,7 +456,7 @@ namespace sigma::kernel_util {
             size_t poly_size,
             size_t coeff_modulus_size,
             size_t poly_modulus_degree_power,
-            ConstDevicePointer<CUNTTTables> ntt_tables,
+            ConstDevicePointer<util::NTTTables> ntt_tables,
             bool use_inv_root_powers
     ) {
         std::size_t n = size_t(1) << poly_modulus_degree_power;
@@ -569,21 +554,21 @@ namespace sigma::kernel_util {
     __global__ void gMultiplyInvPolyDegreeCoeffmod(
             const uint64_t *poly_array,
             POLY_ARRAY_ARGUMENTS,
-            const CUNTTTables *ntt_tables,
+            const util::NTTTables *ntt_tables,
             const Modulus *modulus,
             uint64_t *result) {
         GET_INDEX_COND_RETURN(poly_modulus_degree);
         FOR_N(rns_index, coeff_modulus_size) {
             FOR_N(poly_index, poly_size) {
                 size_t id = (poly_index * coeff_modulus_size + rns_index) * poly_modulus_degree + gindex;
-                result[id] = dMultiplyUintMod(poly_array[id], ntt_tables[rns_index].invDegreeModulo(),
+                result[id] = dMultiplyUintMod(poly_array[id], ntt_tables[rns_index].inv_degree_modulo(),
                                               modulus[rns_index]);
             }
         }
     }
 
     void kMultiplyInvPolyDegreeCoeffmod(CPointer poly_array, POLY_ARRAY_ARGUMENTS,
-                                        ConstDevicePointer<CUNTTTables> ntt_tables,
+                                        ConstDevicePointer<util::NTTTables> ntt_tables,
                                         MPointer modulus, DevicePointer<uint64_t> result) {
         assert(coeff_modulus_size <= 256);
         KERNEL_CALL(gMultiplyInvPolyDegreeCoeffmod, poly_modulus_degree)(
