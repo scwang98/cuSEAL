@@ -31,7 +31,7 @@ namespace sigma
         slots_ = coeff_count >> 1;
         int logn = get_power_of_two(coeff_count);
 
-        auto host_matrix_reps_index_map_ = HostArray<size_t>(coeff_count);
+        host_matrix_reps_index_map_ = HostArray<size_t>(coeff_count);
 
         // Copy from the matrix to the value vectors
         uint64_t gen = 3;

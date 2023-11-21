@@ -566,7 +566,7 @@ namespace sigma
             for (std::size_t i = 0; i < slots_; i++)
             {
                 // TODO: adapt with cuda @wangshuchao
-                destination[i] = from_complex<T>(res[static_cast<std::size_t>(matrix_reps_index_map_.get()[i])]);
+                destination[i] = from_complex<T>(res[static_cast<std::size_t>(host_matrix_reps_index_map_.get()[i])]);
             }
         }
 
@@ -598,6 +598,7 @@ namespace sigma
         util::DeviceArray<cuDoubleComplex> inv_root_powers_;
 
         util::DeviceArray<std::size_t> matrix_reps_index_map_;
+        util::HostArray<std::size_t> host_matrix_reps_index_map_;
 
         ComplexArith complex_arith_;
 
