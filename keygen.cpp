@@ -35,6 +35,9 @@ int main() {
 
     size_t poly_modulus_degree = util::ConfigManager::singleton.int64ValueForKey("poly_modulus_degree");
 
+    // TODO: remove @wangshuchao
+    sigma::KernelProvider::initialize();
+
     sigma::EncryptionParameters parms(sigma::scheme_type::ckks);
     parms.set_poly_modulus_degree(poly_modulus_degree);
     parms.set_coeff_modulus(sigma::CoeffModulus::BFVDefault(poly_modulus_degree));

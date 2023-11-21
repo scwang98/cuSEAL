@@ -22,7 +22,7 @@ int main() {
     sigma::EncryptionParameters params(sigma::scheme_type::ckks);
     params.set_poly_modulus_degree(poly_modulus_degree);
     params.set_coeff_modulus(sigma::CoeffModulus::BFVDefault(poly_modulus_degree));
-    params.setup_device_params(); // 初始化device相关参数
+//    params.setup_device_params(); // 初始化device相关参数
     sigma::SIGMAContext context(params);
 //    context.setup_device_params(); // 初始化device相关参数
     sigma::CKKSEncoder encoder(context);
