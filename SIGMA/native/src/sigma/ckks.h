@@ -183,6 +183,13 @@ namespace sigma
         {
             encode(values, context_.first_parms_id(), scale, destination, std::move(pool));
         }
+
+        inline void encode(
+                const double *values, size_t values_size, double scale, Plaintext &destination,
+                MemoryPoolHandle pool = MemoryManager::GetPool()) const
+        {
+            encode_internal(values, values_size, context_.first_parms_id(), scale, destination, std::move(pool));
+        }
 #ifdef SIGMA_USE_MSGSL
         /**
         Encodes a vector of double-precision floating-point real or complex numbers
