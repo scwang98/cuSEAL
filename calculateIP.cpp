@@ -70,8 +70,9 @@ int main() {
     for (const auto& probe: probe_data) {
         std::vector<sigma::Plaintext> encoded_probes(dimension);
         for (int i = 0; i < dimension; ++i) {
-            std::vector<double> p(slots, probe[i]);
-            encoder.encode(p, scale, encoded_probes[i]);
+//            std::vector<double> p(slots, probe[i]);
+//            encoder.encode(p, scale, encoded_probes[i]);
+            encoder.encode(probe[i], scale, encoded_probes[i]);
         }
 
         std::vector<sigma::Ciphertext> results;
