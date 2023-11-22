@@ -12,7 +12,9 @@ namespace util {
 
     std::vector<std::vector<double>> read_npy_data(const std::string &npy_name);
 
-    std::vector<std::vector<double>> batch_read_npy_data(const std::string &npy_name, size_t batch_size);
+    std::vector<std::vector<double>> batch_read_npy_data(const std::string &npy_name, size_t batch_size, double scale);
+
+    double *read_formatted_npy_data(const std::string &npy_name, size_t slots, double scale, size_t &size);
 
 } // util
 

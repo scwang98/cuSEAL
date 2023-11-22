@@ -15,40 +15,24 @@ const static std::string FILE_STORE_PATH = "../vectors/";
 
 int main() {
 
-//    auto gallery_data = util::read_npy_data(FILE_STORE_PATH + "gallery_x.npy");
-//
-//    gallery_data.assign(gallery_data.begin(), gallery_data.begin() + 32768); // TODO: remove @wangshuchao
-
-    size_t poly_modulus_degree = util::ConfigManager::singleton.int64ValueForKey("poly_modulus_degree");
-    size_t scale_power = util::ConfigManager::singleton.int64ValueForKey("scale_power");
+    size_t poly_modulus_degree = ConfigUtil.int64ValueForKey("poly_modulus_degree");
+    size_t scale_power = ConfigUtil.int64ValueForKey("scale_power");
     double scale = pow(2.0, scale_power);
+    size_t customized_scale_power = ConfigUtil.int64ValueForKey("customized_scale_power");
+    double customized_scale = pow(2.0, customized_scale_power);
 
 
     auto slots = poly_modulus_degree / 2;
-    auto batch_size = slots / 512;
 
-    auto gallery_data = util::batch_read_npy_data(FILE_STORE_PATH + "gallery_x.npy", batch_size);
-
-    auto gallery_data_size = gallery_data.size();
-    gallery_data.assign(gallery_data.begin(), gallery_data.begin() + (gallery_data_size - (gallery_data_size % slots)));
-
-    for (size_t offset = 0; offset < gallery_data.size(); offset += slots) {
-//        for (size_t i = 0; i < slots; i++) {
-//            auto &vec = gallery_data[offset + i];
-//            std::rotate(vec.begin(), vec.begin() + i, vec.end());
-//        }
-        for (size_t i = 0; i < slots; ++i) {
-            for (size_t j = i + 1; j < slots; ++j) {
-                std::swap(gallery_data[offset + i][j], gallery_data[offset + j][i]);
-            }
-        }
-    }
+    size_t gallery_size = 0;
+    auto gallery_ptr = util::read_formatted_npy_data(FILE_STORE_PATH + "gallery_x.npy", slots, customized_scale, gallery_size);
 
     sigma::KernelProvider::initialize();
 
     sigma::EncryptionParameters params(sigma::scheme_type::ckks);
     params.set_poly_modulus_degree(poly_modulus_degree);
-    params.set_coeff_modulus(sigma::CoeffModulus::BFVDefault(poly_modulus_degree));
+    auto modulus_bit_sizes = ConfigUtil.intVectorValueForKey("modulus_bit_sizes");
+    params.set_coeff_modulus(sigma::CoeffModulus::Create(poly_modulus_degree, modulus_bit_sizes));
 //    params.setup_device_params(); // 初始化device相关参数
     sigma::SIGMAContext context(params);
 //    context.setup_device_params(); // 初始化device相关参数
@@ -63,23 +47,17 @@ int main() {
 
     std::ofstream ofs(encrypted_data_path, std::ios::binary);
 
-    for (int i = 0; i < gallery_data.size(); ++i) {
-//    for (int i = 0; i < 10; ++i) {
-        auto &vec = gallery_data[i];
+    for (int i = 0; i < gallery_size; ++i) {
+        auto vec = gallery_ptr + (i * slots);
         sigma::Plaintext plain_vec;
-        encoder.encode(vec, scale, plain_vec);
+        encoder.encode(vec, slots, scale, plain_vec);
         sigma::Ciphertext ciphertext;
         encryptor.encrypt(plain_vec, ciphertext);
         ciphertext.save(ofs);
-        std::cout << "encrypt end " << i << std::endl;
+        std::cout << "encrypt end " << i << std::endl;  // TODO: remove @wangshuchao
     }
-//    for (auto &vec: gallery_data) {
-//        sigma::Plaintext plain_vec;
-//        encoder.encode(vec, scale, plain_vec);
-//        sigma::Ciphertext ciphertext;
-//        encryptor.encrypt(plain_vec, ciphertext);
-//        ciphertext.save(ofs);
-//    }
+
+    delete[] gallery_ptr;
 
     return 0;
 }

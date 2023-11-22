@@ -10,6 +10,8 @@
 #include <cstdint>
 #include <string>
 
+#define ConfigUtil util::ConfigManager::singleton
+
 namespace util {
 
     class ConfigManager {
@@ -19,6 +21,8 @@ namespace util {
         static ConfigManager singleton;
 
         int64_t int64ValueForKey(const std::string& key);
+
+        std::vector<int> intVectorValueForKey(const std::string& key);
 
     private:
 

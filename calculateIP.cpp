@@ -25,15 +25,16 @@ void merge_slots(sigma::Evaluator &evaluator, sigma::Ciphertext ciphertext, cons
 
 int main() {
 
-    size_t poly_modulus_degree = util::ConfigManager::singleton.int64ValueForKey("poly_modulus_degree");
-    size_t scale_power = util::ConfigManager::singleton.int64ValueForKey("scale_power");
+    size_t poly_modulus_degree = ConfigUtil.int64ValueForKey("poly_modulus_degree");
+    size_t scale_power = ConfigUtil.int64ValueForKey("scale_power");
     double scale = pow(2.0, scale_power);
 
     sigma::KernelProvider::initialize();
 
     sigma::EncryptionParameters params(sigma::scheme_type::ckks);
     params.set_poly_modulus_degree(poly_modulus_degree);
-    params.set_coeff_modulus(sigma::CoeffModulus::BFVDefault(poly_modulus_degree));
+    auto modulus_bit_sizes = ConfigUtil.intVectorValueForKey("modulus_bit_sizes");
+    params.set_coeff_modulus(sigma::CoeffModulus::Create(poly_modulus_degree, modulus_bit_sizes));
 //    params.setup_device_params(); // 初始化device相关参数
     sigma::SIGMAContext context(params);
 //    context.setup_device_params(); // 初始化device相关参数
@@ -68,17 +69,8 @@ int main() {
     std::vector<std::vector<sigma::Ciphertext>> final_results;
     for (const auto& probe: probe_data) {
         std::vector<sigma::Plaintext> encoded_probes(dimension);
-//        std::vector<double> batch_probe(slots);
-//        for (int i = 1; i < batch_size; ++i) {
-//            std::copy(probe.begin(), probe.end(), batch_probe.begin() + i * 512);
-//        }
-//        sigma::Plaintext encoded_batch_probe;
-//        encoder.encode(probe, scale, encoded_batch_probe);
         for (int i = 0; i < dimension; ++i) {
             std::vector<double> p(slots, probe[i]);
-//            for (int j = 0; j < slots; ++j) {
-//                p[j] = probe[i];
-//            }
             encoder.encode(p, scale, encoded_probes[i]);
         }
 
@@ -102,18 +94,15 @@ int main() {
     const std::string secret_key_data_path = "../data/secret_key.dat";
     util::load_secret_key(context, secret_key, secret_key_data_path);
     sigma::Decryptor decryptor(context, secret_key);
-
-//    sigma::Plaintext rrr;
-//    decryptor.decrypt(final_results[0][0], rrr);
-//    std::vector<double> dest;
-//    encoder.decode(rrr, dest);
+    size_t customized_scale_power = ConfigUtil.int64ValueForKey("customized_scale_power");
+    double customized_scale = pow(2.0, customized_scale_power);
+    sigma::Plaintext rrr;
+    decryptor.decrypt(final_results[0][0], rrr);
+    std::vector<double> dest;
+    encoder.decode(rrr, dest);
 
     for (int i = 0; i < 8; ++i) {
-        sigma::Plaintext rrr;
-        decryptor.decrypt(final_results[0][i], rrr);
-        std::vector<double> dest;
-        encoder.decode(rrr, dest);
-        std::cout << dest[0] << std::endl;
+        std::cout << dest[i] / customized_scale << std::endl;
     }
 
     return 0;

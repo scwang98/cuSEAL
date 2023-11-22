@@ -30,4 +30,13 @@ namespace util {
         return configValue[key].asInt64();
     }
 
+    std::vector<int> ConfigManager::intVectorValueForKey(const std::string& key) {
+        std::vector<int> numbers;
+        const Json::Value numbersJson = configValue[key];
+        for (const auto& number : numbersJson) {
+            numbers.push_back(number.asInt());
+        }
+        return numbers;
+    }
+
 }
