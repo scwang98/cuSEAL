@@ -15,6 +15,9 @@ const static std::string FILE_STORE_PATH = "../vectors/";
 
 int main() {
 
+    std::cout << "Encode and encrypt start" << std::endl;
+    auto time_start = std::chrono::high_resolution_clock::now();
+
     size_t poly_modulus_degree = ConfigUtil.int64ValueForKey("poly_modulus_degree");
     size_t scale_power = ConfigUtil.int64ValueForKey("scale_power");
     double scale = pow(2.0, scale_power);
@@ -43,7 +46,8 @@ int main() {
     util::load_secret_key(context, secret_key, secret_key_data_path);
 
     sigma::CKKSEncoder encoder(context);
-    sigma::Encryptor encryptor(context, public_key);
+//    sigma::Encryptor encryptor(context, public_key);
+    sigma::Encryptor encryptor(context, secret_key);
 
     std::ofstream ofs(encrypted_data_path, std::ios::binary);
 
@@ -56,6 +60,12 @@ int main() {
         ciphertext.save(ofs);
         std::cout << "encrypt end " << i << std::endl;  // TODO: remove @wangshuchao
     }
+
+    auto time_end = std::chrono::high_resolution_clock::now();
+    auto time_diff = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start);
+    std::cout << "Encode and encrypt end [" << time_diff.count() << " milliseconds]" << std::endl;
+
+    ofs.close();
 
     delete[] gallery_ptr;
 

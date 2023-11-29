@@ -18,20 +18,20 @@ bool fileExists(const std::string& filename) {
 
 int main() {
 
-    if (fileExists(public_key_data_path) || fileExists(secret_key_data_path)) {
-        std::cout << "目录下存在密钥文件，是否覆盖？ [y/n]: ";
-        char response;
-        std::cin >> response;
-
-        if (response == 'n' || response == 'N') {
-            std::cout << "程序结束。\n";
-            return 0;
-        } else if (response != 'y' && response != 'Y') {
-            // 无效的输入，结束程序
-            std::cout << "无效的输入，程序结束。\n";
-            return 0;
-        }
-    }
+//    if (fileExists(public_key_data_path) || fileExists(secret_key_data_path)) {
+//        std::cout << "目录下存在密钥文件，是否覆盖？ [y/n]: ";
+//        char response;
+//        std::cin >> response;
+//
+//        if (response == 'n' || response == 'N') {
+//            std::cout << "程序结束。\n";
+//            return 0;
+//        } else if (response != 'y' && response != 'Y') {
+//            // 无效的输入，结束程序
+//            std::cout << "无效的输入，程序结束。\n";
+//            return 0;
+//        }
+//    }
 
     size_t poly_modulus_degree = ConfigUtil.int64ValueForKey("poly_modulus_degree");
 

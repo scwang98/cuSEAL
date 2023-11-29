@@ -47,11 +47,18 @@ target_link_libraries(encrypt PRIVATE cnpy)
 target_link_libraries(encrypt PRIVATE jsoncpp)
 
 
-add_executable(calculateIP
-        calculateIP.cpp
+add_executable(calculate
+        calculate.cpp
         ${CUSEAL_UTIL_FILES}
 )
-target_link_libraries(calculateIP PRIVATE SIGMA::sigma)
-target_link_libraries(calculateIP PRIVATE cnpy)
-target_link_libraries(calculateIP PRIVATE jsoncpp)
+target_link_libraries(calculate PRIVATE SIGMA::sigma)
+target_link_libraries(calculate PRIVATE cnpy)
+target_link_libraries(calculate PRIVATE jsoncpp)
 
+add_executable(decrypt
+        decrypt.cpp
+        ${CUSEAL_UTIL_FILES}
+)
+target_link_libraries(decrypt PRIVATE SIGMA::sigma)
+target_link_libraries(decrypt PRIVATE cnpy)
+target_link_libraries(decrypt PRIVATE jsoncpp)
