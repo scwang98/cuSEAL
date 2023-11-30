@@ -54,9 +54,7 @@ int main() {
         auto vec = gallery_ptr + (i * slots);
         sigma::Plaintext plain_vec;
         encoder.encode(vec, slots, scale, plain_vec);
-        sigma::Ciphertext ciphertext;
-        encryptor.encrypt_symmetric(plain_vec, ciphertext);
-        ciphertext.save(ofs);
+        encryptor.encrypt_symmetric(plain_vec).save(ofs);
         std::cout << "encrypt end " << i << std::endl;  // TODO: remove @wangshuchao
     }
 
