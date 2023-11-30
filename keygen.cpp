@@ -47,9 +47,9 @@ int main() {
 
     sigma::KeyGenerator keygen(context);
 
-    sigma::PublicKey public_key;
-    keygen.create_public_key(public_key);
-    util::save_public_key(public_key, public_key_data_path);
+//    sigma::PublicKey public_key;
+//    keygen.create_public_key(public_key);
+//    util::save_public_key(public_key, public_key_data_path);
 
     sigma::SecretKey secret_key;
     secret_key = keygen.secret_key();

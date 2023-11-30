@@ -46,7 +46,6 @@ int main() {
     util::load_secret_key(context, secret_key, secret_key_data_path);
 
     sigma::CKKSEncoder encoder(context);
-//    sigma::Encryptor encryptor(context, public_key);
     sigma::Encryptor encryptor(context, secret_key);
 
     std::ofstream ofs(encrypted_data_path, std::ios::binary);
@@ -56,7 +55,7 @@ int main() {
         sigma::Plaintext plain_vec;
         encoder.encode(vec, slots, scale, plain_vec);
         sigma::Ciphertext ciphertext;
-        encryptor.encrypt(plain_vec, ciphertext);
+        encryptor.encrypt_symmetric(plain_vec, ciphertext);
         ciphertext.save(ofs);
         std::cout << "encrypt end " << i << std::endl;  // TODO: remove @wangshuchao
     }
