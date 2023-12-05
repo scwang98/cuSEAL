@@ -11,7 +11,7 @@
 #include "util/keyutil.h"
 
 const std::string secret_key_data_path = "../data/secret_key.dat";
-const std::string encrypted_data_path = "../data/gallery.dat";
+const std::string encrypted_c1_data_path = "../data/ip_results/encrypted_c1.dat";
 const std::string results_data_path = "../data/ip_results/top_ip_results.json";
 
 std::string ip_results_path(size_t index) {
@@ -54,6 +54,8 @@ public:
 
 int main() {
 
+    TIMER_START;
+
     size_t poly_modulus_degree = ConfigUtil.int64ValueForKey("poly_modulus_degree");
     size_t scale_power = ConfigUtil.int64ValueForKey("scale_power");
     double scale = pow(2.0, scale_power);
@@ -77,29 +79,39 @@ int main() {
     size_t customized_scale_power = ConfigUtil.int64ValueForKey("customized_scale_power");
     double customized_scale = pow(2.0, customized_scale_power);
 
+    std::ifstream c1_ifs(encrypted_c1_data_path, std::ios::binary);
+
     Json::Value root;
     for (size_t i = 0;; i++) {
         std::ifstream ifs(ip_results_path(i), std::ios::binary);
         if (!ifs.good()) {
             break;
         }
+
+        sigma::Ciphertext c1;
+        c1.use_half_data() = true;
+        c1.load(context, c1_ifs);
+
         TopNPairs pairs(5);
         size_t idx = 0;
         while (!ifs.eof()) {
             sigma::Ciphertext encrypted_vec;
+            encrypted_vec.use_half_data() = true;
             try {
                 encrypted_vec.load(context, ifs);
             } catch (const std::exception &e) {
                 break;
             }
-            sigma::Plaintext rrr;
-            decryptor.decrypt(encrypted_vec, rrr);
+            sigma::Plaintext plaintext;
+            decryptor.ckks_decrypt(encrypted_vec, c1, plaintext);
             std::vector<double> dest;
-            encoder.decode(rrr, dest);
+            encoder.decode(plaintext, dest);
             for (auto value: dest) {
                 pairs.add(std::pair(value / customized_scale, idx++));
             }
+//            std::cout << "Decrypt end " << idx << std::endl;
         }
+        ifs.close();
         Json::Value ips;
         auto data = pairs.getData();
         for (auto pair: data) {
@@ -122,6 +134,8 @@ int main() {
     } else {
         std::cerr << "Unable to open file for writing." << std::endl;
     }
+
+    TIMER_PRINT_NOW(Decrypt_and_decode);
 
     return 0;
 }

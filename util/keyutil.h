@@ -7,6 +7,11 @@
 #ifndef CUSEAL_KEYUTIL_H
 #define CUSEAL_KEYUTIL_H
 
+#define TIMER_START auto __timer_start = std::chrono::high_resolution_clock::now()
+#define TIMER_PRINT_NOW(name) \
+    auto name = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - __timer_start); \
+    std::cout << #name << " [" << name.count() << " milliseconds]" << std::endl
+
 namespace util {
 
     void save_public_key(const sigma::PublicKey& publicKey, const std::string& path);

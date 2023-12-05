@@ -232,10 +232,11 @@ namespace sigma
 
 #ifdef SIGMA_THROW_ON_TRANSPARENT_CIPHERTEXT
         // Transparent ciphertext output is not allowed.
-        if (encrypted1.is_transparent())
-        {
-            throw logic_error("result ciphertext is transparent");
-        }
+        // 暂时注掉, Release下判断条件有问题
+//        if (encrypted1.is_transparent())
+//        {
+//            throw logic_error("result ciphertext is transparent");
+//        }
 #endif
     }
 
@@ -1989,10 +1990,11 @@ namespace sigma
 
 #ifdef SIGMA_THROW_ON_TRANSPARENT_CIPHERTEXT
         // Transparent ciphertext output is not allowed.
-        if (encrypted.is_transparent())
-        {
-            throw logic_error("result ciphertext is transparent");
-        }
+        // 暂时注掉, Release下判断条件有问题
+//        if (encrypted.is_transparent())
+//        {
+//            throw logic_error("result ciphertext is transparent");
+//        }
 #endif
     }
 

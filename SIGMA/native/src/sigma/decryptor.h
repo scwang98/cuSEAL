@@ -73,6 +73,8 @@ namespace sigma
         */
         void decrypt(const Ciphertext &encrypted, Plaintext &destination);
 
+        void ckks_decrypt(const Ciphertext &encrypted, const Ciphertext &c1, Plaintext &destination);
+
         /*
         Computes the invariant noise budget (in bits) of a ciphertext. The
         invariant noise budget measures the amount of room there is for the noise
@@ -120,6 +122,7 @@ namespace sigma
         // Store result in destination in RNS form.
         // destination has the size of an RNS polynomial.
         void dot_product_ct_sk_array(const Ciphertext &encrypted, util::RNSIter destination, MemoryPoolHandle pool);
+        void ckks_dot_product_ct_sk_array(const Ciphertext &encrypted, const sigma::Ciphertext &c1, util::RNSIter destination);
 
         // We use a fresh memory pool with `clear_on_destruction' enabled.
         MemoryPoolHandle pool_ = MemoryManager::GetPool(mm_prof_opt::mm_force_new, true);

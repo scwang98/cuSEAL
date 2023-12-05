@@ -456,12 +456,15 @@ namespace sigma
                 MemoryPoolHandle pool) const;
 
     private:
-        template <
-            typename T, typename = std::enable_if_t<
-                            std::is_same<std::remove_cv_t<T>, double>::value ||
-                            std::is_same<std::remove_cv_t<T>, std::complex<double>>::value>>
+//        template <
+//            typename T, typename = std::enable_if_t<
+//                            std::is_same<std::remove_cv_t<T>, double>::value ||
+//                            std::is_same<std::remove_cv_t<T>, std::complex<double>>::value>>
+//        void encode_internal_cu(
+//            const T *values, size_t values_size, parms_id_type parms_id, double scale, Plaintext &destination,
+//            MemoryPoolHandle pool) const;
         void encode_internal_cu(
-            const T *values, size_t values_size, parms_id_type parms_id, double scale, Plaintext &destination,
+            const double *values, size_t values_size, parms_id_type parms_id, double scale, Plaintext &destination,
             MemoryPoolHandle pool) const;
 
         template <

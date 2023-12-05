@@ -100,7 +100,11 @@ namespace sigma
 
     void Ciphertext::resize_internal(size_t size, size_t poly_modulus_degree, size_t coeff_modulus_size)
     {
-        if ((size < SIGMA_CIPHERTEXT_SIZE_MIN && size != 0) || size > SIGMA_CIPHERTEXT_SIZE_MAX)
+        if (use_half_data_) {
+            if (size > SIGMA_CIPHERTEXT_SIZE_MAX) {
+                throw invalid_argument("invalid size");
+            }
+        } else if ((size < SIGMA_CIPHERTEXT_SIZE_MIN && size != 0) || size > SIGMA_CIPHERTEXT_SIZE_MAX)
         {
             throw invalid_argument("invalid size");
         }
@@ -288,6 +292,7 @@ namespace sigma
             new_data.coeff_modulus_size_ = safe_cast<size_t>(coeff_modulus_size64);
             new_data.scale_ = scale;
             new_data.correction_factor_ = correction_factor;
+            new_data.use_half_data_ = use_half_data_;
 
             // Checking the validity of loaded metadata
             // Note: We allow pure key levels here! This is to allow load_members
@@ -321,7 +326,7 @@ namespace sigma
 
             // This is the case where we need to expand a seed, otherwise full
             // ciphertext data was already (possibly) loaded and we are done
-            if (unsigned_eq(new_data.data_.size(), seeded_uint64_count))
+            if (!use_half_data_ && unsigned_eq(new_data.data_.size(), seeded_uint64_count))
             {
                 // Single polynomial size data was loaded, so we are in the seeded
                 // ciphertext case. Next load the UniformRandomGeneratorInfo.

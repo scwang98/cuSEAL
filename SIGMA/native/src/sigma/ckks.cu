@@ -105,7 +105,7 @@ namespace sigma
         conj_values[matrix_reps_index_map[gindex + slots]] = {value, -0};
     }
 
-    void set_conj_values(
+    inline void set_conj_values(
             const complex<double>* values,
             size_t values_size,
             const size_t slots,
@@ -123,13 +123,14 @@ namespace sigma
         );
     }
 
-    void set_conj_values(
+    inline void set_conj_values(
             const double* values,
             size_t values_size,
             size_t slots,
             cuDoubleComplex* conj_values,
             const uint64_t* matrix_reps_index_map
     ) {
+        auto start = std::chrono::high_resolution_clock::now();
         auto device_values = util::DeviceArray<double>(values_size);
         KernelProvider::copy(device_values.get(), values, values_size);
         KERNEL_CALL(g_set_conj_values_double, slots)(
@@ -199,6 +200,22 @@ namespace sigma
         if (fix != 1) {
             KERNEL_CALL(gMultiplyScalar, n)(operand, n, fix);
         }
+    }
+
+    __global__ void gMaxReal(
+            double* complexes,
+            size_t n_sqrt,
+            size_t n,
+            double* out
+    ) {
+        GET_INDEX_COND_RETURN(n_sqrt);
+        double m = 0;
+        FOR_N(i, n_sqrt) {
+            size_t id = gindex * n_sqrt + i;
+            if (id >= n) break;
+            if (fabs(complexes[id * 2]) > m) m = fabs(complexes[id * 2]);
+        }
+        out[gindex] = m;
     }
 
     __global__ void findMax(cuDoubleComplex* d_array, size_t size, double* result) {
@@ -289,9 +306,9 @@ namespace sigma
         }
     }
 
-    template <typename T, typename>
+//    template <typename T, typename>
     void CKKSEncoder::encode_internal_cu(
-            const T *values, size_t values_size, parms_id_type parms_id, double scale, Plaintext &destination,
+            const double *values, size_t values_size, parms_id_type parms_id, double scale, Plaintext &destination,
             MemoryPoolHandle pool) const
     {
         // Verify parameters.
@@ -339,7 +356,20 @@ namespace sigma
         auto device_conj_values = kernel_util::kAllocateZero<cuDoubleComplex>(n);
         auto device_values = util::DeviceArray<double>(values_size);
 
-        set_conj_values(values, values_size, slots_, device_conj_values.get(), matrix_reps_index_map_.get());
+        auto start = std::chrono::high_resolution_clock::now();
+
+//        set_conj_values(values, values_size, slots_, device_conj_values.get(), matrix_reps_index_map_.get());
+        auto device_com_values = util::DeviceArray<double>(values_size);
+        KernelProvider::copy(device_com_values.get(), values, values_size);
+        {
+            KERNEL_CALL(g_set_conj_values_double, slots_)(
+                    device_com_values.get(),
+                    values_size,
+                    slots_,
+                    device_conj_values.get(),
+                    matrix_reps_index_map_.get()
+            );
+        }
 
         double fix = scale / static_cast<double>(n);
         kFftTransferFromRev(
@@ -352,7 +382,7 @@ namespace sigma
         {
             size_t block_count = kernel_util::ceilDiv_(n, 256);
             int sharedMemSize = 256 * sizeof(double);
-            double* d_result = KernelProvider::malloc<double>(block_count); // 用于存储每个线程块的局部最大值
+            auto* d_result = KernelProvider::malloc<double>(block_count); // 用于存储每个线程块的局部最大值
             double h_result[block_count];
             findMax<<<block_count, 256, sharedMemSize>>>(device_conj_values.get(), n, d_result);
             KernelProvider::retrieve(h_result, d_result, block_count);
@@ -626,6 +656,6 @@ namespace sigma
 
     void CKKSEncoder::encode_internal(const std::complex<double> *values, size_t values_size, parms_id_type parms_id,
                                       double scale, Plaintext &destination, MemoryPoolHandle pool) const {
-        encode_internal_cu(values, values_size, parms_id, scale, destination, pool);
+//        encode_internal_cu(values, values_size, parms_id, scale, destination, pool);
     }
 } // namespace sigma

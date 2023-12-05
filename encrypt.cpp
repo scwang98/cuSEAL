@@ -11,6 +11,7 @@
 const std::string public_key_data_path = "../data/public_key.dat";
 const std::string secret_key_data_path = "../data/secret_key.dat";
 const std::string encrypted_data_path = "../data/gallery.dat";
+const std::string encrypted_c1_data_path = "../data/encrypted_c1.dat";
 const static std::string FILE_STORE_PATH = "../vectors/";
 
 int main() {
@@ -40,13 +41,20 @@ int main() {
     sigma::SIGMAContext context(params);
 //    context.setup_device_params(); // 初始化device相关参数
 
-    sigma::PublicKey public_key;
+//    sigma::PublicKey public_key;
     sigma::SecretKey secret_key;
-    util::load_public_key(context, public_key, public_key_data_path);
+//    util::load_public_key(context, public_key, public_key_data_path);
     util::load_secret_key(context, secret_key, secret_key_data_path);
 
     sigma::CKKSEncoder encoder(context);
     sigma::Encryptor encryptor(context, secret_key);
+
+    sigma::Ciphertext c1;
+    c1.use_half_data() = true;
+    encryptor.sample_symmetric_ckks_c1(c1);
+    std::ofstream c1_ofs(encrypted_c1_data_path, std::ios::binary);
+    c1.save(c1_ofs);
+    c1_ofs.close();
 
     std::ofstream ofs(encrypted_data_path, std::ios::binary);
 
@@ -54,8 +62,11 @@ int main() {
         auto vec = gallery_ptr + (i * slots);
         sigma::Plaintext plain_vec;
         encoder.encode(vec, slots, scale, plain_vec);
-        encryptor.encrypt_symmetric(plain_vec).save(ofs);
-        std::cout << "encrypt end " << i << std::endl;  // TODO: remove @wangshuchao
+        sigma::Ciphertext ciphertext;
+        ciphertext.use_half_data() = true;
+        encryptor.encrypt_symmetric_ckks(plain_vec, ciphertext, c1);
+        ciphertext.save(ofs);
+//        std::cout << "encrypt end " << i << std::endl;  // TODO: remove @wangshuchao
     }
 
     auto time_end = std::chrono::high_resolution_clock::now();

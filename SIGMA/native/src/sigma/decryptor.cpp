@@ -84,7 +84,7 @@ namespace sigma
         }
 
         // Additionally check that ciphertext doesn't have trivial size
-        if (encrypted.size() < SIGMA_CIPHERTEXT_SIZE_MIN)
+        if (!encrypted.use_half_data() && encrypted.size() < SIGMA_CIPHERTEXT_SIZE_MIN)
         {
             throw invalid_argument("encrypted is empty");
         }
@@ -109,6 +109,63 @@ namespace sigma
         default:
             throw invalid_argument("unsupported scheme");
         }
+    }
+
+    void Decryptor::ckks_decrypt(const sigma::Ciphertext &encrypted, const sigma::Ciphertext &c1,
+                                 sigma::Plaintext &destination) {
+        if (!encrypted.is_ntt_form())
+        {
+            throw invalid_argument("encrypted must be in NTT form");
+        }
+
+        // We already know that the parameters are valid
+        auto &context_data = *context_.get_context_data(encrypted.parms_id());
+        auto &parms = context_data.parms();
+        auto &coeff_modulus = parms.coeff_modulus();
+        size_t coeff_count = parms.poly_modulus_degree();
+        size_t coeff_modulus_size = coeff_modulus.size();
+        size_t rns_poly_uint64_count = mul_safe(coeff_count, coeff_modulus_size);
+
+        // Decryption consists in finding
+        // c_0 + c_1 *s + ... + c_{count-1} * s^{count-1} mod q_1 * q_2 * q_3
+        // as long as ||m + v|| < q_1 * q_2 * q_3.
+        // This is equal to m + v where ||v|| is small enough.
+
+        // Since we overwrite destination, we zeroize destination parameters
+        // This is necessary, otherwise resize will throw an exception.
+        destination.parms_id() = parms_id_zero;
+
+        // Resize destination to appropriate size
+        destination.resize(rns_poly_uint64_count);
+
+        // Do the dot product of encrypted and the secret key array using NTT.
+        ckks_dot_product_ct_sk_array(encrypted, c1, RNSIter(destination.data(), coeff_count));
+
+        // Set destination parameters as in encrypted
+        destination.parms_id() = encrypted.parms_id();
+        destination.scale() = encrypted.scale();
+    }
+
+    void Decryptor::ckks_dot_product_ct_sk_array(
+            const sigma::Ciphertext &encrypted, const sigma::Ciphertext &c1, util::RNSIter destination) {
+        auto &context_data = *context_.get_context_data(encrypted.parms_id());
+        auto &parms = context_data.parms();
+        auto &coeff_modulus = parms.coeff_modulus();
+        size_t coeff_count = parms.poly_modulus_degree();
+        size_t coeff_modulus_size = coeff_modulus.size();
+
+        // Make sure we have enough secret key powers computed
+        compute_secret_key_array(1);
+
+        ConstRNSIter secret_key_array(secret_key_array_.get(), coeff_count);
+        ConstRNSIter c0_iter(encrypted.data(0), coeff_count);
+        ConstRNSIter c1_iter(c1.data(), coeff_count);
+        SIGMA_ITERATE(iter(c0_iter, c1_iter, secret_key_array, coeff_modulus, destination), coeff_modulus_size, [&](auto I) {
+            // put < c_1 * s > mod q in destination
+            dyadic_product_coeffmod(get<1>(I), get<2>(I), coeff_count, get<3>(I), get<4>(I));
+            // add c_0 to the result; note that destination should be in the same (NTT) form as encrypted
+            add_poly_coeffmod(get<4>(I), get<0>(I), coeff_count, get<3>(I), get<4>(I));
+        });
     }
 
     void Decryptor::bfv_decrypt(const Ciphertext &encrypted, Plaintext &destination, MemoryPoolHandle pool)

@@ -274,6 +274,16 @@ namespace sigma
             encrypt_internal(plain, false, false, destination, pool);
         }
 
+        inline void encrypt_symmetric_ckks(
+                const Plaintext &plain, Ciphertext &destination, Ciphertext &c1) const
+        {
+            encrypt_symmetric_ckks_internal(plain, destination, c1);
+        }
+
+        inline void sample_symmetric_ckks_c1(Ciphertext &destination) const {
+            sample_symmetric_ckks_c1_internal(destination);
+        }
+
         /**
         Encrypts a plaintext with the secret key and returns the ciphertext as
         a serializable object.
@@ -422,6 +432,10 @@ namespace sigma
         void encrypt_internal(
             const Plaintext &plain, bool is_asymmetric, bool save_seed, Ciphertext &destination,
             MemoryPoolHandle pool = MemoryManager::GetPool()) const;
+
+        void sample_symmetric_ckks_c1_internal(Ciphertext &destination) const;
+
+        void encrypt_symmetric_ckks_internal(const Plaintext &plain, Ciphertext &destination, Ciphertext &c1) const;
 
         SIGMAContext context_;
 

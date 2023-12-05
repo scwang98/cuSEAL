@@ -9,8 +9,9 @@
 #include "util/vectorutil.h"
 #include "util/keyutil.h"
 
-const std::string galois_keys_data_path = "../data/galois_keys.dat";
 const std::string encrypted_data_path = "../data/gallery.dat";
+const std::string encrypted_c1_data_path = "../data/encrypted_c1.dat";
+const std::string c1s_data_path = "../data/ip_results/encrypted_c1.dat";
 const static std::string FILE_STORE_PATH = "../vectors/";
 
 std::string ip_results_path(size_t index) {
@@ -18,6 +19,8 @@ std::string ip_results_path(size_t index) {
 }
 
 int main() {
+
+    TIMER_START;
 
     size_t poly_modulus_degree = ConfigUtil.int64ValueForKey("poly_modulus_degree");
     size_t scale_power = ConfigUtil.int64ValueForKey("scale_power");
@@ -33,10 +36,18 @@ int main() {
     sigma::SIGMAContext context(params);
 //    context.setup_device_params(); // 初始化device相关参数
 
+    std::ifstream c1_ifs(encrypted_c1_data_path, std::ios::binary);
+    sigma::Ciphertext c1;
+    c1.use_half_data() = true;
+    // TODO: check load with context
+    c1.load(context, c1_ifs);
+    c1_ifs.close();
+
     std::vector<sigma::Ciphertext> gallery_data;
     std::ifstream gifs(encrypted_data_path, std::ios::binary);
     while (!gifs.eof()) {
         sigma::Ciphertext encrypted_vec;
+        encrypted_vec.use_half_data() = true;
         try {
             encrypted_vec.load(context, gifs);
             gallery_data.push_back(encrypted_vec);
@@ -44,31 +55,37 @@ int main() {
             break;
         }
     }
-//    gallery_data.assign(gallery_data.begin(), gallery_data.begin() + 4096);
+    gifs.close();
 
     auto probe_data = util::read_npy_data(FILE_STORE_PATH + "probe_x.npy");
     // TODO: remove @wangshuchao
-    probe_data.assign(probe_data.begin(), probe_data.begin() + 2);
+    probe_data.assign(probe_data.begin(), probe_data.begin() + 100);
 
     sigma::CKKSEncoder encoder(context);
     sigma::Evaluator evaluator(context);
 
-//    sigma::GaloisKeys galois_keys;
-//    util::load_galois_key(context, galois_keys, galois_keys_data_path);
-
     size_t dimension = 512;
-    auto slots = poly_modulus_degree / 2;
-    auto batch_size = slots / dimension;
+
+    std::ofstream c1_ofs(c1s_data_path, std::ios::binary);
 
     for (size_t pi = 0; pi < probe_data.size(); ++pi) {
         const auto& probe = probe_data[pi];
         std::vector<sigma::Plaintext> encoded_probes(dimension);
-        for (int i = 0; i < dimension; ++i) {
+        encoder.encode(probe[0], scale, encoded_probes[0]);
+        auto c1_sum = c1;
+        evaluator.multiply_plain_inplace(c1_sum, encoded_probes[0]);
+        for (int i = 1; i < dimension; ++i) {
             encoder.encode(probe[i], scale, encoded_probes[i]);
+
+            auto row = c1;
+            evaluator.multiply_plain_inplace(row, encoded_probes[i]);
+            evaluator.add_inplace(c1_sum, row);
         }
+        c1_sum.save(c1_ofs);
 
         std::ofstream ofs(ip_results_path(pi), std::ios::binary);
         size_t calculate_size = gallery_data.size() / 512 * 512;
+        std::vector<sigma::Ciphertext> results;
         for (size_t offset = 0; offset < calculate_size; offset += dimension) {
             auto result = gallery_data[offset];
             evaluator.multiply_plain_inplace(result, encoded_probes[0]);
@@ -76,13 +93,16 @@ int main() {
                 auto row = gallery_data[offset + i];
                 evaluator.multiply_plain_inplace(row, encoded_probes[i]);
                 evaluator.add_inplace(result, row);
-                std::cout << "offset=" << offset << " " << "i=" << i << std::endl;
+//                std::cout << "offset=" << offset << " " << "i=" << i << std::endl;
             }
             result.save(ofs);
         }
         ofs.close();
-        std::cout << "calculate end " << pi << std::endl;  // TODO: remove @wangshuchao
+//        std::cout << "calculate end " << pi << std::endl;  // TODO: remove @wangshuchao
     }
+    c1_ofs.close();
+
+    TIMER_PRINT_NOW(Calculate_inner_product);
 
     return 0;
 }

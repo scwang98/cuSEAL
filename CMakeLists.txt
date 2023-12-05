@@ -25,7 +25,7 @@ add_executable(cuSEAL
 )
 target_link_libraries(cuSEAL PRIVATE SIGMA::sigma)
 target_link_libraries(cuSEAL PRIVATE cnpy)
-target_include_directories(cuSEAL PRIVATE cnpy)
+#target_include_directories(cuSEAL PRIVATE cnpy)
 target_link_libraries(cuSEAL PRIVATE jsoncpp)
 
 

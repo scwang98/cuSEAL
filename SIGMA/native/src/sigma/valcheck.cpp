@@ -96,7 +96,11 @@ namespace sigma
 
         // Check that size is either 0 or within right bounds
         auto size = in.size();
-        if ((size < SIGMA_CIPHERTEXT_SIZE_MIN && size != 0) || size > SIGMA_CIPHERTEXT_SIZE_MAX)
+        if (in.use_half_data()) {
+            if (size > SIGMA_CIPHERTEXT_SIZE_MAX) {
+                return false;
+            }
+        } else if ((size < SIGMA_CIPHERTEXT_SIZE_MIN && size != 0) || size > SIGMA_CIPHERTEXT_SIZE_MAX)
         {
             return false;
         }

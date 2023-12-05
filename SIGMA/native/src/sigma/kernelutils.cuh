@@ -1,3 +1,4 @@
+#pragma once
 
 #include "kernelprovider.h"
 #include "util/devicearray.cuh"
@@ -560,6 +561,66 @@ namespace sigma {
                     1 << poly_modulus_degree_power, ntt_tables);
         }
 
+        template<unsigned l, unsigned n>
+        __global__ void ntt_transform_to_rev(uint64_t *values, const MultiplyUIntModOperand *roots, Modulus &modulus) {
+
+//            size_t n = size_t(1) << log_n;
+            auto two_times_modulus = modulus.value() << 1;
+            // registers to hold temporary values
+            MultiplyUIntModOperand r;
+            uint64_t u;
+            uint64_t v;
+            // pointers for faster indexing
+            uint64_t *x = nullptr;
+            uint64_t *y = nullptr;
+            // variables for indexing
+            std::size_t gap = n >> 1;
+
+
+            __shared__ uint64_t shared_array[2048];
+            shared_array[0] = values[0];
+            shared_array[gap] = values[gap];
+
+            for (std::size_t m = l; m < (n >> 1); m <<= 1) {
+
+//                std::size_t offset = 0;
+//                for (std::size_t i = 0; i < m; i++) {
+//                    r = *++roots;
+//                    x = values + offset;
+//                    y = x + gap;
+//                    for (std::size_t j = 0; j < gap; j++) {
+//                        u = *x >= two_times_modulus ? *x - two_times_modulus : *x;
+//                        v = multiply_uint_mod_lazy(*y, r, modulus);
+//                        *x++ = u - v;
+//                        *y++ = u + two_times_modulus - v;
+//                    }
+//                    offset += gap << 1;
+//                }
+                gap >>= 1;
+            }
+        }
+
+        inline void kNttNegacyclicHarveydd(uint64_t *operand, const util::NTTTables &tables) {
+//            tables.ntt_handler().transform_to_rev(operand, tables.coeff_count_power(), tables.get_from_root_powers());
+//            // Finally maybe we need to reduce every coefficient modulo q, but we
+//            // know that they are in the range [0, 4q).
+//            // Since word size is controlled this is fast.
+//            std::uint64_t modulus = tables.modulus().value();
+//            std::uint64_t two_times_modulus = modulus * 2;
+//            std::size_t n = std::size_t(1) << tables.coeff_count_power();
+//
+//            SIGMA_ITERATE(operand, n, [&](auto &I) {
+//                // Note: I must be passed to the lambda by reference.
+//                if (I >= two_times_modulus)
+//                {
+//                    I -= two_times_modulus;
+//                }
+//                if (I >= modulus)
+//                {
+//                    I -= modulus;
+//                }
+//            });
+        }
 
         inline void kInverseNttNegacyclicHarveyLazy(
                 DevicePointer<uint64_t> operand,

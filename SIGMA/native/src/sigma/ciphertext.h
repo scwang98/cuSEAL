@@ -450,9 +450,20 @@ namespace sigma
         */
         SIGMA_NODISCARD inline bool is_transparent() const
         {
-            return (
-                !data_.size() || (size_ < SIGMA_CIPHERTEXT_SIZE_MIN) ||
-                std::all_of(data(1), data_.cend(), util::is_zero<ct_coeff_type>));
+            if (!data_.size()) {
+                return true;
+            }
+            auto result1 = !use_half_data_ && (size_ < SIGMA_CIPHERTEXT_SIZE_MIN); // 此处必须定义一个变量储存判断条件，否则release下判断条件会走错（为什么为什么我不理解
+            if (result1) {
+                std::cout << "use_half_data_ = " << use_half_data_ << std::endl;
+                std::cout << "result1 = " << result1 << std::endl;
+                return true;
+            }
+            auto result2 = !use_half_data_ && std::all_of(data(1), data_.cend(), util::is_zero<ct_coeff_type>);
+            if (result2) {
+                std::cout << "result2 = " << result2 << std::endl;
+                return true;
+            }
         }
 
         /**
@@ -518,6 +529,7 @@ namespace sigma
         inline std::streamoff load(const SIGMAContext &context, std::istream &stream)
         {
             Ciphertext new_data(pool());
+            new_data.use_half_data_ = use_half_data_;
             auto in_size = new_data.unsafe_load(context, stream);
             if (!is_valid_for(new_data, context))
             {
@@ -676,6 +688,16 @@ namespace sigma
             return data_.pool();
         }
 
+        SIGMA_NODISCARD inline bool use_half_data() const noexcept
+        {
+            return use_half_data_;
+        }
+
+        SIGMA_NODISCARD inline bool &use_half_data() noexcept
+        {
+            return use_half_data_;
+        }
+
         /**
         Enables access to private members of sigma::Ciphertext for SIGMA_C.
         */
@@ -713,5 +735,7 @@ namespace sigma
         std::uint64_t correction_factor_ = 1;
 
         DynArray<ct_coeff_type> data_;
+
+        bool use_half_data_ = false;
     };
 } // namespace sigma

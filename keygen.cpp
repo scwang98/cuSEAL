@@ -33,6 +33,8 @@ int main() {
 //        }
 //    }
 
+    TIMER_START;
+
     size_t poly_modulus_degree = ConfigUtil.int64ValueForKey("poly_modulus_degree");
 
     // TODO: remove @wangshuchao
@@ -58,6 +60,8 @@ int main() {
 //    sigma::GaloisKeys galois_keys;
 //    keygen.create_galois_keys(galois_keys);
 //    util::save_galois_keys(galois_keys, galois_keys_data_path);
+
+    TIMER_PRINT_NOW(KeyGen);
 
     return 0;
 }
