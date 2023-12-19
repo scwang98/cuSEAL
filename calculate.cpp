@@ -59,7 +59,7 @@ int main() {
 
     auto probe_data = util::read_npy_data(FILE_STORE_PATH + "probe_x.npy");
     // TODO: remove @wangshuchao
-    probe_data.assign(probe_data.begin(), probe_data.begin() + 100);
+    probe_data.assign(probe_data.begin(), probe_data.begin() + 3);
 
     sigma::CKKSEncoder encoder(context);
     sigma::Evaluator evaluator(context);

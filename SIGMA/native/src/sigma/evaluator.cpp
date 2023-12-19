@@ -145,10 +145,10 @@ namespace sigma
         negate_poly_coeffmod(encrypted, encrypted_size, coeff_modulus, encrypted);
 #ifdef SIGMA_THROW_ON_TRANSPARENT_CIPHERTEXT
         // Transparent ciphertext output is not allowed.
-        if (encrypted.is_transparent())
-        {
-            throw logic_error("result ciphertext is transparent");
-        }
+//        if (encrypted.is_transparent())
+//        {
+//            throw logic_error("result ciphertext is transparent");
+//        }
 #endif
     }
 
@@ -343,10 +343,10 @@ namespace sigma
 
 #ifdef SIGMA_THROW_ON_TRANSPARENT_CIPHERTEXT
         // Transparent ciphertext output is not allowed.
-        if (encrypted1.is_transparent())
-        {
-            throw logic_error("result ciphertext is transparent");
-        }
+//        if (encrypted1.is_transparent())
+//        {
+//            throw logic_error("result ciphertext is transparent");
+//        }
 #endif
     }
 
@@ -386,10 +386,10 @@ namespace sigma
         }
 #ifdef SIGMA_THROW_ON_TRANSPARENT_CIPHERTEXT
         // Transparent ciphertext output is not allowed.
-        if (encrypted1.is_transparent())
-        {
-            throw logic_error("result ciphertext is transparent");
-        }
+//        if (encrypted1.is_transparent())
+//        {
+//            throw logic_error("result ciphertext is transparent");
+//        }
 #endif
     }
 
@@ -869,10 +869,10 @@ namespace sigma
         }
 #ifdef SIGMA_THROW_ON_TRANSPARENT_CIPHERTEXT
         // Transparent ciphertext output is not allowed.
-        if (encrypted.is_transparent())
-        {
-            throw logic_error("result ciphertext is transparent");
-        }
+//        if (encrypted.is_transparent())
+//        {
+//            throw logic_error("result ciphertext is transparent");
+//        }
 #endif
     }
 
@@ -1192,10 +1192,10 @@ namespace sigma
         encrypted.resize(context_, context_data_ptr->parms_id(), destination_size);
 #ifdef SIGMA_THROW_ON_TRANSPARENT_CIPHERTEXT
         // Transparent ciphertext output is not allowed.
-        if (encrypted.is_transparent())
-        {
-            throw logic_error("result ciphertext is transparent");
-        }
+//        if (encrypted.is_transparent())
+//        {
+//            throw logic_error("result ciphertext is transparent");
+//        }
 #endif
     }
 
@@ -1420,10 +1420,10 @@ namespace sigma
         }
 #ifdef SIGMA_THROW_ON_TRANSPARENT_CIPHERTEXT
         // Transparent ciphertext output is not allowed.
-        if (destination.is_transparent())
-        {
-            throw logic_error("result ciphertext is transparent");
-        }
+//        if (destination.is_transparent())
+//        {
+//            throw logic_error("result ciphertext is transparent");
+//        }
 #endif
     }
 
@@ -1512,10 +1512,10 @@ namespace sigma
         }
 #ifdef SIGMA_THROW_ON_TRANSPARENT_CIPHERTEXT
         // Transparent ciphertext output is not allowed.
-        if (destination.is_transparent())
-        {
-            throw logic_error("result ciphertext is transparent");
-        }
+//        if (destination.is_transparent())
+//        {
+//            throw logic_error("result ciphertext is transparent");
+//        }
 #endif
     }
 
@@ -1566,10 +1566,10 @@ namespace sigma
         }
 #ifdef SIGMA_THROW_ON_TRANSPARENT_CIPHERTEXT
         // Transparent ciphertext output is not allowed.
-        if (encrypted.is_transparent())
-        {
-            throw logic_error("result ciphertext is transparent");
-        }
+//        if (encrypted.is_transparent())
+//        {
+//            throw logic_error("result ciphertext is transparent");
+//        }
 #endif
     }
 
@@ -1594,10 +1594,10 @@ namespace sigma
         mod_switch_drop_to_next(encrypted, encrypted, std::move(pool));
 #ifdef SIGMA_THROW_ON_TRANSPARENT_CIPHERTEXT
         // Transparent ciphertext output is not allowed.
-        if (encrypted.is_transparent())
-        {
-            throw logic_error("result ciphertext is transparent");
-        }
+//        if (encrypted.is_transparent())
+//        {
+//            throw logic_error("result ciphertext is transparent");
+//        }
 #endif
     }
 
@@ -1836,10 +1836,10 @@ namespace sigma
         }
 #ifdef SIGMA_THROW_ON_TRANSPARENT_CIPHERTEXT
         // Transparent ciphertext output is not allowed.
-        if (encrypted.is_transparent())
-        {
-            throw logic_error("result ciphertext is transparent");
-        }
+//        if (encrypted.is_transparent())
+//        {
+//            throw logic_error("result ciphertext is transparent");
+//        }
 #endif
     }
 
@@ -1944,10 +1944,10 @@ namespace sigma
         }
 #ifdef SIGMA_THROW_ON_TRANSPARENT_CIPHERTEXT
         // Transparent ciphertext output is not allowed.
-        if (encrypted.is_transparent())
-        {
-            throw logic_error("result ciphertext is transparent");
-        }
+//        if (encrypted.is_transparent())
+//        {
+//            throw logic_error("result ciphertext is transparent");
+//        }
 #endif
     }
 
@@ -2307,10 +2307,10 @@ namespace sigma
         encrypted.is_ntt_form() = true;
 #ifdef SIGMA_THROW_ON_TRANSPARENT_CIPHERTEXT
         // Transparent ciphertext output is not allowed.
-        if (encrypted.is_transparent())
-        {
-            throw logic_error("result ciphertext is transparent");
-        }
+//        if (encrypted.is_transparent())
+//        {
+//            throw logic_error("result ciphertext is transparent");
+//        }
 #endif
     }
 
@@ -2354,10 +2354,10 @@ namespace sigma
         encrypted_ntt.is_ntt_form() = false;
 #ifdef SIGMA_THROW_ON_TRANSPARENT_CIPHERTEXT
         // Transparent ciphertext output is not allowed.
-        if (encrypted_ntt.is_transparent())
-        {
-            throw logic_error("result ciphertext is transparent");
-        }
+//        if (encrypted_ntt.is_transparent())
+//        {
+//            throw logic_error("result ciphertext is transparent");
+//        }
 #endif
     }
 
@@ -2458,10 +2458,10 @@ namespace sigma
             encrypted, temp, static_cast<const KSwitchKeys &>(galois_keys), GaloisKeys::get_index(galois_elt), pool);
 #ifdef SIGMA_THROW_ON_TRANSPARENT_CIPHERTEXT
         // Transparent ciphertext output is not allowed.
-        if (encrypted.is_transparent())
-        {
-            throw logic_error("result ciphertext is transparent");
-        }
+//        if (encrypted.is_transparent())
+//        {
+//            throw logic_error("result ciphertext is transparent");
+//        }
 #endif
     }
 

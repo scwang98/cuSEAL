@@ -126,6 +126,7 @@ namespace sigma
         The first two components of the Barrett ratio are the floor of 2^128/value,
         and the third component is the remainder.
         */
+        __host__ __device__
         SIGMA_NODISCARD inline auto &const_ratio() const noexcept
         {
             return const_ratio_;

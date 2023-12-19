@@ -442,7 +442,9 @@ namespace sigma
         }
 
         // Transform to NTT domain
-        kernel_util::kNttNegacyclicHarvey(dest_arr.get(), 1, coeff_modulus_size, util::get_power_of_two(n), ntt_tables);
+        for (std::size_t i = 0; i < coeff_modulus_size; i++) {
+            kernel_util::g_ntt_negacyclic_harvey(dest_arr.get() + i * coeff_count, coeff_count, ntt_tables.get()[i]);
+        }
 
         destination.resize(dest_size);
         cudaMemcpy(destination.data(), dest_arr.get(), dest_size * sizeof(uint64_t), cudaMemcpyDeviceToHost);

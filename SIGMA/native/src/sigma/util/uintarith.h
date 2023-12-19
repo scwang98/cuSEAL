@@ -828,9 +828,10 @@ namespace sigma
         }
 
         template <typename T, typename S, typename = std::enable_if_t<is_uint64_v<T, S>>>
+        __host__ __device__
         inline void multiply_uint64_hw64(T operand1, S operand2, unsigned long long *hw64)
         {
-            SIGMA_MULTIPLY_UINT64_HW64(operand1, operand2, hw64);
+            *hw64 = static_cast<unsigned long long>(((static_cast<uint128_t>(operand1) * static_cast<uint128_t>(operand2)) >> 64));
         }
 
         void multiply_uint(

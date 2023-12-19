@@ -11,8 +11,8 @@ class uint128_ntt
 {
 public:
 
-	unsigned long long low;
-	unsigned long long high;
+	uint64_t low;
+	uint64_t high;
 
 	__host__ __device__ __forceinline__ uint128_ntt()
 	{
@@ -350,7 +350,7 @@ __device__ __forceinline__ void sub128(uint128_ntt& a, const uint128_ntt& b)
 		: "l"(a.high), "l"(a.low), "l"(b.high), "l"(b.low));
 }
 
-__device__ __forceinline__ void mul64(const unsigned long long& a, const unsigned long long& b, uint128_ntt& c)
+__device__ __forceinline__ void mul64(const uint64_t& a, const uint64_t& b, uint128_ntt& c)
 {
 	uint4 res;
 
@@ -368,6 +368,6 @@ __device__ __forceinline__ void mul64(const unsigned long long& a, const unsigne
 		: "=r"(res.x), "=r"(res.y), "=r"(res.z), "=r"(res.w)
 		: "r"((unsigned)(a >> 32)), "r"((unsigned)a), "r"((unsigned)(b >> 32)), "r"((unsigned)b));
 
-	c.high = ((unsigned long long)res.x << 32) + res.y;
-	c.low = ((unsigned long long)res.z << 32) + res.w;;
+	c.high = ((uint64_t)res.x << 32) + res.y;
+	c.low = ((uint64_t)res.z << 32) + res.w;;
 }

@@ -6,6 +6,7 @@
 #include "util/uintarithsmallmod.h"
 #include "util/ntt.h"
 #include "modulus.h"
+#include "util/uint128_ntt.h"
 
 #define KERNEL_CALL(funcname, n) size_t block_count = kernel_util::ceilDiv_(n, 256); funcname<<<block_count, 256>>>
 #define POLY_ARRAY_ARGUMENTS size_t poly_size, size_t coeff_modulus_size, size_t poly_modulus_degree
@@ -96,6 +97,11 @@ namespace sigma {
                     ((static_cast<uint128_t>(operand1) * static_cast<uint128_t>(operand2)) >> 64));
         }
 
+        __device__ inline void d_multiply_uint64_hw64(uint64_t operand1, uint64_t operand2, uint64_t *hw64) {
+            *hw64 = static_cast<uint64_t>(
+                    ((static_cast<uint128_t>(operand1) * static_cast<uint128_t>(operand2)) >> 64));
+        }
+
         __device__ inline uint64_t dBarrettReduce64(uint64_t input, const Modulus &modulus) {
             uint64_t tmp[2];
             const std::uint64_t *const_ratio = DeviceHelper::getModulusConstRatio(modulus);
@@ -109,18 +115,39 @@ namespace sigma {
             return (tmp[0] >= modulusValue) ? (tmp[0] - modulusValue) : (tmp[0]);
         }
 
+        __device__ inline uint64_t d_barrett_reduce_64(uint64_t input, const Modulus &modulus) {
+            uint64_t tmp[2];
+            const std::uint64_t *const_ratio = modulus.const_ratio();
+            d_multiply_uint64_hw64(input, const_ratio[1], tmp + 1);
+            uint64_t modulusValue = modulus.value();
 
-        __device__ inline void dMultiplyUint64(uint64_t operand1, uint64_t operand2, uint64_t *result128) {
+            // Barrett subtraction
+            tmp[0] = input - tmp[1] * modulusValue;
+
+            // One more subtraction is enough
+            return (tmp[0] >= modulusValue) ? (tmp[0] - modulusValue) : (tmp[0]);
+        }
+
+        __device__
+        inline uint64_t d_multiply_uint_mod_lazy(std::uint64_t x, MultiplyUIntModOperand y, const Modulus &modulus) {
+            uint64_t tmp1;
+            const uint64_t p = modulus.value();
+            d_multiply_uint64_hw64(x, y.quotient, &tmp1);
+            return y.operand * x - tmp1 * p;
+        }
+
+        __device__
+        inline void dMultiplyUint64(uint64_t operand1, uint64_t operand2, uint64_t *result128) {
             uint128_t product = static_cast<uint128_t>(operand1) * operand2;
             result128[0] = static_cast<unsigned long long>(product);
             result128[1] = static_cast<unsigned long long>(product >> 64);
         }
 
-        __device__ inline uint64_t
-        dMultiplyUintMod(uint64_t x, const MultiplyUIntModOperand &y, const Modulus &modulus) {
+        __device__
+        inline uint64_t dMultiplyUintMod(uint64_t x, const MultiplyUIntModOperand &y, const Modulus &modulus) {
             uint64_t tmp1, tmp2;
             const std::uint64_t p = DeviceHelper::getModulusValue(modulus);
-            dMultiplyUint64HW64(x, y.quotient, &tmp1);
+            d_multiply_uint64_hw64(x, y.quotient, &tmp1);
             tmp2 = y.operand * x - tmp1 * p;
             return (tmp2 >= p) ? (tmp2 - p) : (tmp2);
         }
@@ -130,7 +157,7 @@ namespace sigma {
                 std::uint64_t x, const MultiplyUIntModOperand &y, const Modulus &modulus) {
             uint64_t tmp1;
             const std::uint64_t p = DeviceHelper::getModulusValue(modulus);
-            dMultiplyUint64HW64(x, y.quotient, &tmp1);
+            d_multiply_uint64_hw64(x, y.quotient, &tmp1);
             return y.operand * x - tmp1 * p;
         }
 
@@ -166,7 +193,7 @@ namespace sigma {
 
             // Multiply input and const_ratio
             // Round 1
-            dMultiplyUint64HW64(input[0], const_ratio[0], &carry);
+            d_multiply_uint64_hw64(input[0], const_ratio[0], &carry);
 
             dMultiplyUint64(input[0], const_ratio[1], tmp2);
             tmp3 = tmp2[1] + dAddUint64(tmp2[0], carry, &tmp1);
@@ -194,7 +221,7 @@ namespace sigma {
                 if (*value < DeviceHelper::getModulusValue(modulus))
                     return *value;
                 else
-                    return dBarrettReduce64(*value, modulus);
+                    return d_barrett_reduce_64(*value, modulus);
             }
 
             // Temporary space for 128-bit reductions
@@ -359,11 +386,11 @@ namespace sigma {
                 std::uint64_t operand1, const MultiplyUIntModOperand &operand2, std::uint64_t operand3,
                 const Modulus &modulus) {
             return dAddUintMod(
-                    dMultiplyUintMod(operand1, operand2, modulus), dBarrettReduce64(operand3, modulus), modulus);
+                    dMultiplyUintMod(operand1, operand2, modulus), d_barrett_reduce_64(operand3, modulus), modulus);
 
             // uint64_t tmp1, tmp2;
             // const std::uint64_t p = DeviceHelper::getModulusValue(modulus);
-            // dMultiplyUint64HW64(x, y.quotient, &tmp1);
+            // d_multiply_uint64_hw64(x, y.quotient, &tmp1);
             // // printf("%llu, %llu, %llu\n");
             // printf("%llu\n", x);
             // tmp2 = 0;
@@ -378,7 +405,7 @@ namespace sigma {
         __device__ inline uint64_t dMultiplyScalarMod(uint64_t operand, std::uint64_t scalar, const Modulus &modulus) {
             // Scalar must be first reduced modulo modulus
             MultiplyUIntModOperand temp_scalar
-                    = dSetMultiplyModOperand(dBarrettReduce64(scalar, modulus), modulus);
+                    = dSetMultiplyModOperand(d_barrett_reduce_64(scalar, modulus), modulus);
             return dMultiplyUintMod(operand, temp_scalar, modulus);
         }
 
@@ -515,19 +542,6 @@ namespace sigma {
                 uint64_t *result
         );
 
-        void kNegatePolyCoeffmod(
-                CPointer poly_array, POLY_ARRAY_ARGUMENTS,
-                MPointer modulus, DevicePointer<uint64_t> result
-        );
-
-        void kNttTransferToRev(
-                uint64_t *operand,
-                size_t poly_size,
-                size_t coeff_modulus_size,
-                size_t poly_modulus_degree_power,
-                ConstDevicePointer<util::NTTTables> ntt_tables,
-                bool use_inv_root_powers);
-
         void kNttTransferFromRev(
                 DevicePointer<uint64_t> operand,
                 size_t poly_size,
@@ -536,91 +550,7 @@ namespace sigma {
                 ConstDevicePointer<util::NTTTables> ntt_tables,
                 bool use_inv_root_powers);
 
-        inline void kNttNegacyclicHarveyLazy(
-                uint64_t *operand,
-                size_t poly_size,
-                size_t coeff_modulus_size,
-                size_t poly_modulus_degree_power,
-                ConstDevicePointer<util::NTTTables> ntt_tables) {
-            kNttTransferToRev(operand, poly_size, coeff_modulus_size,
-                              poly_modulus_degree_power, ntt_tables, false);
-        }
-
-        inline void kNttNegacyclicHarvey(
-                uint64_t *operand,
-                size_t poly_size,
-                size_t coeff_modulus_size,
-                size_t poly_modulus_degree_power,
-                ConstDevicePointer<util::NTTTables> ntt_tables) {
-            kNttNegacyclicHarveyLazy(
-                    operand, poly_size, coeff_modulus_size,
-                    poly_modulus_degree_power, ntt_tables
-            );
-            kModBoundedUsingNttTables(
-                    operand, poly_size, coeff_modulus_size,
-                    1 << poly_modulus_degree_power, ntt_tables);
-        }
-
-        template<unsigned l, unsigned n>
-        __global__ void ntt_transform_to_rev(uint64_t *values, const MultiplyUIntModOperand *roots, Modulus &modulus) {
-
-//            size_t n = size_t(1) << log_n;
-            auto two_times_modulus = modulus.value() << 1;
-            // registers to hold temporary values
-            MultiplyUIntModOperand r;
-            uint64_t u;
-            uint64_t v;
-            // pointers for faster indexing
-            uint64_t *x = nullptr;
-            uint64_t *y = nullptr;
-            // variables for indexing
-            std::size_t gap = n >> 1;
-
-
-            __shared__ uint64_t shared_array[2048];
-            shared_array[0] = values[0];
-            shared_array[gap] = values[gap];
-
-            for (std::size_t m = l; m < (n >> 1); m <<= 1) {
-
-//                std::size_t offset = 0;
-//                for (std::size_t i = 0; i < m; i++) {
-//                    r = *++roots;
-//                    x = values + offset;
-//                    y = x + gap;
-//                    for (std::size_t j = 0; j < gap; j++) {
-//                        u = *x >= two_times_modulus ? *x - two_times_modulus : *x;
-//                        v = multiply_uint_mod_lazy(*y, r, modulus);
-//                        *x++ = u - v;
-//                        *y++ = u + two_times_modulus - v;
-//                    }
-//                    offset += gap << 1;
-//                }
-                gap >>= 1;
-            }
-        }
-
-        inline void kNttNegacyclicHarveydd(uint64_t *operand, const util::NTTTables &tables) {
-//            tables.ntt_handler().transform_to_rev(operand, tables.coeff_count_power(), tables.get_from_root_powers());
-//            // Finally maybe we need to reduce every coefficient modulo q, but we
-//            // know that they are in the range [0, 4q).
-//            // Since word size is controlled this is fast.
-//            std::uint64_t modulus = tables.modulus().value();
-//            std::uint64_t two_times_modulus = modulus * 2;
-//            std::size_t n = std::size_t(1) << tables.coeff_count_power();
-//
-//            SIGMA_ITERATE(operand, n, [&](auto &I) {
-//                // Note: I must be passed to the lambda by reference.
-//                if (I >= two_times_modulus)
-//                {
-//                    I -= two_times_modulus;
-//                }
-//                if (I >= modulus)
-//                {
-//                    I -= modulus;
-//                }
-//            });
-        }
+        void g_ntt_negacyclic_harvey(uint64_t *operand, size_t coeff_count, const util::NTTTables &tables);
 
         inline void kInverseNttNegacyclicHarveyLazy(
                 DevicePointer<uint64_t> operand,
@@ -646,26 +576,6 @@ namespace sigma {
                     operand, poly_size, coeff_modulus_size,
                     1 << poly_modulus_degree_power, ntt_tables);
         }
-
-        __global__ void gNttTransferToRevLayered(
-                size_t layer,
-                uint64_t *operand,
-                size_t poly_size,
-                size_t coeff_modulus_size,
-                size_t poly_modulus_degree_power,
-                const util::NTTTables *ntt_tables,
-                bool use_inv_root_powers
-        );
-
-        void kNttTransferToRevLayered(
-                size_t layer,
-                uint64_t *operand,
-                size_t poly_size,
-                size_t coeff_modulus_size,
-                size_t poly_modulus_degree_power,
-                ConstDevicePointer<util::NTTTables> ntt_tables,
-                bool use_inv_root_powers
-        );
 
         __global__ void gNttTransferFromRevLayered(
                 size_t layer,

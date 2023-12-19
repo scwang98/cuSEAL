@@ -11,27 +11,7 @@ const std::string public_key_data_path = "../data/public_key.dat";
 const std::string secret_key_data_path = "../data/secret_key.dat";
 const std::string galois_keys_data_path = "../data/galois_keys.dat";
 
-bool fileExists(const std::string& filename) {
-    std::ifstream file(filename.c_str());
-    return file.good();
-}
-
 int main() {
-
-//    if (fileExists(public_key_data_path) || fileExists(secret_key_data_path)) {
-//        std::cout << "目录下存在密钥文件，是否覆盖？ [y/n]: ";
-//        char response;
-//        std::cin >> response;
-//
-//        if (response == 'n' || response == 'N') {
-//            std::cout << "程序结束。\n";
-//            return 0;
-//        } else if (response != 'y' && response != 'Y') {
-//            // 无效的输入，结束程序
-//            std::cout << "无效的输入，程序结束。\n";
-//            return 0;
-//        }
-//    }
 
     TIMER_START;
 

@@ -52,7 +52,7 @@ namespace sigma::kernel_util {
 
         // Multiply input and const_ratio
         // Round 1
-        dMultiplyUint64HW64(z[0], const_ratio_0, &carry);
+        d_multiply_uint64_hw64(z[0], const_ratio_0, &carry);
         dMultiplyUint64(z[0], const_ratio_1, tmp2);
         tmp3 = tmp2[1] + dAddUint64(tmp2[0], carry, &tmp1);
 
@@ -221,7 +221,7 @@ namespace sigma::kernel_util {
         FOR_N(rns_index, coeff_modulus_size) {
             FOR_N(poly_index, poly_size) {
                 size_t id = (poly_index * coeff_modulus_size + rns_index) * poly_modulus_degree + gindex;
-                result[id] = dBarrettReduce64(operand[id], moduli[rns_index]);
+                result[id] = d_barrett_reduce_64(operand[id], moduli[rns_index]);
             }
         }
     }
@@ -301,39 +301,6 @@ namespace sigma::kernel_util {
         }
     }
 
-    void kNegatePolyCoeffmod(
-            CPointer poly_array, POLY_ARRAY_ARGUMENTS,
-            MPointer modulus, DevicePointer<uint64_t> result
-    ) {
-        KERNEL_CALL(gNegatePolyCoeffmod, poly_modulus_degree)(
-                poly_array.get(),
-                POLY_ARRAY_ARGCALL,
-                modulus.get(),
-                result.get()
-        );
-    }
-
-    void kNttTransferToRev(
-            uint64_t *operand,
-            size_t poly_size,
-            size_t coeff_modulus_size,
-            size_t poly_modulus_degree_power,
-            ConstDevicePointer<util::NTTTables> ntt_tables,
-            bool use_inv_root_powers
-    ) {
-        std::size_t m = 1;
-        std::size_t layer = 0;
-        std::size_t n = size_t(1) << poly_modulus_degree_power;
-        for (; m <= (n >> 1); m <<= 1) {
-            kNttTransferToRevLayered(
-                    layer, operand,
-                    poly_size, coeff_modulus_size,
-                    poly_modulus_degree_power, ntt_tables,
-                    use_inv_root_powers);
-            layer++;
-        }
-    }
-
     void kNttTransferFromRev(
             DevicePointer<uint64_t> operand,
             size_t poly_size,
@@ -355,59 +322,6 @@ namespace sigma::kernel_util {
         }
         KERNEL_CALL(gMultiplyInvDegreeNttTables, n)(
                 operand.get(), poly_size, coeff_modulus_size, n, ntt_tables.get()
-        );
-    }
-
-    __global__ void gNttTransferToRevLayered(
-            size_t layer,
-            uint64_t* operand,
-            size_t poly_size,
-            size_t coeff_modulus_size,
-            size_t poly_modulus_degree_power,
-            const util::NTTTables* ntt_tables,
-            bool use_inv_root_powers
-    ) {
-        GET_INDEX_COND_RETURN(1 << (poly_modulus_degree_power - 1));
-        size_t m = 1 << layer;
-        size_t gap_power = poly_modulus_degree_power - layer - 1;
-        size_t gap = 1 << gap_power;
-        size_t rid = m + (gindex >> gap_power);
-        size_t coeff_index = ((gindex >> gap_power) << (gap_power + 1)) + (gindex & (gap - 1));
-        uint64_t u, v;
-        FOR_N(rns_index, coeff_modulus_size) {
-            const Modulus &modulus = ntt_tables[rns_index].modulus();
-            uint64_t two_times_modulus = DeviceHelper::getModulusValue(modulus) << 1;
-            MultiplyUIntModOperand r = use_inv_root_powers ?
-                                       (ntt_tables[rns_index].get_from_device_inv_root_powers()[rid]) :
-                                       (ntt_tables[rns_index].get_from_device_root_powers()[rid]);
-            FOR_N(poly_index, poly_size) {
-                uint64_t *x = operand + ((poly_index * coeff_modulus_size + rns_index) << poly_modulus_degree_power) +
-                              coeff_index;
-                uint64_t *y = x + gap;
-                // printf("before: x = %llu, y = %llu, rid = %lu, r = (%llu, %llu), modulus = %llu\n", *x, *y, rid, r.operand, r.quotient, DeviceHelper::getModulusValue(modulus));
-                u = (*x > two_times_modulus) ? (*x - two_times_modulus) : (*x);
-                v = dMultiplyUintModLazy(*y, r, modulus);
-                *x = u + v;
-                *y = u + two_times_modulus - v;
-                // printf("m = %lu xid = %lu u = %llu v = %llu x = %llu y = %llu\n", m, ((poly_index * coeff_modulus_size + rns_index) << poly_modulus_degree_power) + coeff_index, u, v, *x, *y);
-            }
-        }
-    }
-
-    void kNttTransferToRevLayered(
-            size_t layer,
-            uint64_t *operand,
-            size_t poly_size,
-            size_t coeff_modulus_size,
-            size_t poly_modulus_degree_power,
-            ConstDevicePointer<util::NTTTables> ntt_tables,
-            bool use_inv_root_powers
-    ) {
-        std::size_t n = size_t(1) << poly_modulus_degree_power;
-        KERNEL_CALL(gNttTransferToRevLayered, n)(
-                layer, operand, poly_size, coeff_modulus_size,
-                poly_modulus_degree_power, ntt_tables.get(),
-                use_inv_root_powers
         );
     }
 
@@ -470,7 +384,7 @@ namespace sigma::kernel_util {
     __global__ void
     gSetMultiplyUIntModOperand(uint64_t scalar, const Modulus *moduli, size_t n, MultiplyUIntModOperand *result) {
         GET_INDEX_COND_RETURN(n);
-        uint64_t reduced = dBarrettReduce64(scalar, moduli[gindex]);
+        uint64_t reduced = d_barrett_reduce_64(scalar, moduli[gindex]);
         result[gindex].operand = reduced;
         std::uint64_t wide_quotient[2]{0, 0};
         std::uint64_t wide_coeff[2]{0, result[gindex].operand};
@@ -575,6 +489,124 @@ namespace sigma::kernel_util {
                 poly_array.get(), POLY_ARRAY_ARGCALL, ntt_tables.get(),
                 modulus.get(), result.get()
         );
+    }
+
+    template<unsigned l, unsigned n>
+    __global__ void ct_ntt_inner(uint64_t *values, const util::NTTTables &tables) {
+
+        const MultiplyUIntModOperand *roots = tables.get_from_device_root_powers();
+        const Modulus &modulus = tables.modulus();
+
+        auto modulus_value = modulus.value();
+        auto two_times_modulus = modulus_value << 1;
+
+        auto global_tid = blockIdx.x * 1024 + threadIdx.x;
+        auto step = (n / l) / 2;
+        auto psi_step = global_tid / step;
+        auto target_index = psi_step * step * 2 + global_tid % step;
+
+        const MultiplyUIntModOperand &r = roots[l + psi_step];
+
+        uint64_t &x = values[target_index];
+        uint64_t &y = values[target_index + step];
+        uint64_t u = x >= two_times_modulus ? x - two_times_modulus : x;
+        uint64_t v = d_multiply_uint_mod_lazy(y, r, modulus);
+        x = u + v;
+        y = u + two_times_modulus - v;
+    }
+
+    template<uint l, uint n>
+    __global__ void ct_ntt_inner_single(uint64_t *values, const util::NTTTables &tables) {
+        auto local_tid = threadIdx.x;
+
+        const MultiplyUIntModOperand *roots = tables.get_from_device_root_powers();
+        const Modulus &modulus = tables.modulus();
+
+        extern __shared__ uint64_t shared_array[];  // declaration of shared_array
+
+#pragma unroll
+        for (uint iteration_num = 0; iteration_num < (n / 1024 / l); iteration_num++) {
+            auto global_tid = local_tid + iteration_num * 1024;
+            auto index = global_tid + blockIdx.x * (n / l);
+            shared_array[global_tid] = values[global_tid + blockIdx.x * (n / l)];
+        }
+
+        auto modulus_value = modulus.value();
+        auto two_times_modulus = modulus_value << 1;
+
+        auto step = n / l;
+#pragma unroll
+        for (uint length = l; length < n; length <<= 1) {
+            step >>= 1;
+
+#pragma unroll
+            for (uint iteration_num = 0; iteration_num < (n / 1024 / l) / 2; iteration_num++) {
+                auto global_tid = local_tid + iteration_num * 1024;
+                auto psi_step = global_tid / step;
+                auto target_index = psi_step * step * 2 + global_tid % step;
+                psi_step = (global_tid + blockIdx.x * (n / l / 2)) / step;
+
+                const MultiplyUIntModOperand &r = roots[length + psi_step];
+
+                uint64_t &x = shared_array[target_index];
+                uint64_t &y = shared_array[target_index + step];
+                uint64_t u = x >= two_times_modulus ? x - two_times_modulus : x;
+                uint64_t v = d_multiply_uint_mod_lazy(y, r, modulus);
+                x = u + v;
+                y = u + two_times_modulus - v;
+            }
+            __syncthreads();
+        }
+
+        uint64_t value;
+#pragma unroll
+        for (int iteration_num = 0; iteration_num < (n / 1024 / l); iteration_num++) {
+            auto global_tid = local_tid + iteration_num * 1024;
+
+            value = shared_array[global_tid];
+            if (value >= two_times_modulus) {
+                value -= two_times_modulus;
+            }
+            if (value >= modulus_value) {
+                value -= modulus_value;
+            }
+
+            values[global_tid + blockIdx.x * (n / l)] = value;
+        }
+    }
+
+    void g_ntt_negacyclic_harvey(uint64_t *operand, size_t coeff_count, const util::NTTTables &tables) {
+        switch (coeff_count) {
+            case 32768: {
+                ct_ntt_inner<1, 32768><<<32768 / 1024 / 2, 1024>>>(operand, tables);
+                ct_ntt_inner<2, 32768><<<32768 / 1024 / 2, 1024>>>(operand, tables);
+                ct_ntt_inner<4, 32768><<<32768 / 1024 / 2, 1024>>>(operand, tables);
+                ct_ntt_inner_single<2, 8192><<<2, 1024, 4096 * sizeof(uint64_t)>>>(operand, tables);
+                break;
+            }
+            case 16384: {
+                ct_ntt_inner<1, 16384><<<16384 / 1024 / 2, 1024>>>(operand, tables);
+                ct_ntt_inner<2, 16384><<<16384 / 1024 / 2, 1024>>>(operand, tables);
+                ct_ntt_inner_single<2, 8192><<<2, 1024, 4096 * sizeof(uint64_t)>>>(operand, tables);
+                break;
+            }
+            case 8192: {
+                ct_ntt_inner<1, 8192><<<8192 / 1024 / 2, 1024>>>(operand, tables);
+                ct_ntt_inner_single<2, 8192><<<2, 1024, 4096 * sizeof(uint64_t)>>>(operand, tables);
+                break;
+            }
+            case 4096: {
+                ct_ntt_inner_single<1, 4096> <<<1, 1024, 4096 * sizeof(uint64_t)>>>(operand, tables);
+                break;
+            }
+            case 2048: {
+                ct_ntt_inner_single<1, 2048> <<<1, 1024, 2048 * sizeof(uint64_t)>>>(operand, tables);
+                break;
+            }
+            default:
+                throw std::invalid_argument("not support");
+        }
+        CHECK(cudaGetLastError());
     }
 
 }
