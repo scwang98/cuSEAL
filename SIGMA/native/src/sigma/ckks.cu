@@ -412,7 +412,7 @@ namespace sigma
 
         auto dest_size = util::mul_safe(coeff_count, coeff_modulus_size);
 
-        DeviceArray<uint64_t> dest_arr(dest_size);
+        destination.device_resize(dest_size);
 
         // Use faster decomposition methods when possible
         if (max_coeff_bit_count <= 64)
@@ -422,7 +422,7 @@ namespace sigma
                     n, coeff_modulus_size,
                     coeff_modulus.get(),
                     // TODO: wangshuchao
-                    dest_arr.get()
+                    destination.device_data()
             );
         }
         else if (max_coeff_bit_count <= 128)
@@ -432,7 +432,7 @@ namespace sigma
                     n,
                     coeff_modulus_size,
                     coeff_modulus.get(),
-                    dest_arr.get()
+                    destination.device_data()
             );
         }
         else
@@ -440,14 +440,12 @@ namespace sigma
             // Slow case
             throw std::invalid_argument("not support");
         }
+        device_conj_values.release();
 
         // Transform to NTT domain
         for (std::size_t i = 0; i < coeff_modulus_size; i++) {
-            kernel_util::g_ntt_negacyclic_harvey(dest_arr.get() + i * coeff_count, coeff_count, ntt_tables.get()[i]);
+            kernel_util::g_ntt_negacyclic_harvey(destination.device_data() + i * coeff_count, coeff_count, ntt_tables.get()[i]);
         }
-
-        destination.resize(dest_size);
-        cudaMemcpy(destination.data(), dest_arr.get(), dest_size * sizeof(uint64_t), cudaMemcpyDeviceToHost);
 
         destination.parms_id() = parms_id;
         destination.scale() = scale;

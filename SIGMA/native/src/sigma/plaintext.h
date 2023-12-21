@@ -12,6 +12,7 @@
 #include "sigma/util/common.h"
 #include "sigma/util/defines.h"
 #include "sigma/util/polycore.h"
+#include "sigma/util/devicearray.cuh"
 #include <algorithm>
 #include <functional>
 #include <stdexcept>
@@ -228,6 +229,7 @@ namespace sigma
             coeff_count_ = 0;
             scale_ = 1.0;
             data_.release();
+            device_data_.release();
         }
 
         /**
@@ -246,6 +248,11 @@ namespace sigma
                 throw std::logic_error("cannot reserve for an NTT transformed Plaintext");
             }
             data_.resize(coeff_count);
+            coeff_count_ = coeff_count;
+        }
+
+        inline void device_resize(std::size_t coeff_count) {
+            device_data_.resize(coeff_count);
             coeff_count_ = coeff_count;
         }
 
@@ -390,6 +397,19 @@ namespace sigma
         {
             return data_.cbegin();
         }
+
+        SIGMA_NODISCARD inline const auto &device_array() const noexcept {
+            return device_data_;
+        }
+
+        SIGMA_NODISCARD inline pt_coeff_type *device_data() {
+            return device_data_.get();
+        }
+
+        SIGMA_NODISCARD inline const pt_coeff_type *device_data() const {
+            return device_data_.get();
+        }
+
 #ifdef SIGMA_USE_MSGSL
         /**
         Returns a span pointing to the beginning of the text polynomial.
@@ -783,6 +803,14 @@ namespace sigma
             return data_.pool();
         }
 
+        inline void copy_to_device() {
+            device_data_.set_host_data(data_.begin(), data_.size());
+        }
+
+        inline void release_device_data() {
+            device_data_.release();
+        }
+
         /**
         Enables access to private members of sigma::Plaintext for SIGMA_C.
         */
@@ -800,6 +828,8 @@ namespace sigma
         double scale_ = 1.0;
 
         DynArray<pt_coeff_type> data_;
+
+        util::DeviceArray<pt_coeff_type> device_data_;
 
         // SecretKey needs access to save_members/load_members
         friend class SecretKey;

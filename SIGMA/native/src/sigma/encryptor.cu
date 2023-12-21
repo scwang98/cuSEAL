@@ -9,6 +9,9 @@
 #include "sigma/util/polyarithsmallmod.h"
 #include "sigma/util/rlwe.h"
 #include "sigma/util/scalingvariant.h"
+#include "sigma/kernelutils.cuh"
+#include "kernelprovider.h"
+#include "sigma/util/randomgenerator.cuh"
 #include <chrono>
 #include <algorithm>
 #include <stdexcept>
@@ -84,6 +87,10 @@ namespace sigma
         {
             throw logic_error("invalid parameters");
         }
+    }
+
+    Encryptor::~Encryptor() {
+        delete random_generator_;
     }
 
     void Encryptor::encrypt_zero_internal(
@@ -216,7 +223,6 @@ namespace sigma
         }
         else if (scheme == scheme_type::ckks)
         {
-//            auto start = std::chrono::high_resolution_clock::now();
             if (!plain.is_ntt_form())
             {
                 throw invalid_argument("plain must be in NTT form");
@@ -340,65 +346,18 @@ namespace sigma
 
     }
 
-    void encrypt_zero_symmetric_ckks(
-            const SecretKey &secret_key, const SIGMAContext &context, parms_id_type parms_id, Ciphertext &destination,
-            uint64_t *c1)
-    {
-        // We use a fresh memory pool with `clear_on_destruction' enabled.
-        MemoryPoolHandle pool = MemoryManager::GetPool(mm_prof_opt::mm_force_new, true);
-
-        auto &context_data = *context.get_context_data(parms_id);
-        auto &parms = context_data.parms();
-        auto &coeff_modulus = parms.coeff_modulus();
-        size_t coeff_modulus_size = coeff_modulus.size();
-        size_t coeff_count = parms.poly_modulus_degree();
-        auto ntt_tables = context_data.small_ntt_tables();
-
-        destination.resize(context, parms_id, 1);
-        destination.is_ntt_form() = true;
-        destination.scale() = 1.0;
-        destination.correction_factor() = 1;
-
-        // Generate ciphertext: (c[0], c[1]) = ([-(as+ e)]_q, a) in BFV/CKKS
-        uint64_t *c0 = destination.data();
-
-        // Sample e <-- chi
-        auto bootstrap_prng = parms.random_generator()->create();
-        auto noise(allocate_poly(coeff_count, coeff_modulus_size, pool));
-        SIGMA_NOISE_SAMPLER(bootstrap_prng, parms, noise.get());
-
-        // Calculate -(as+ e) (mod q) and store in c[0] in BFV/CKKS
-        // Calculate -(as+pe) (mod q) and store in c[0] in BGV
-        for (size_t i = 0; i < coeff_modulus_size; i++)
-        {
-            dyadic_product_coeffmod(
-                    secret_key.data().data() + i * coeff_count, c1 + i * coeff_count, coeff_count, coeff_modulus[i],
-                    c0 + i * coeff_count);
-            // Transform the noise e into NTT representation
-            ntt_negacyclic_harvey(noise.get() + i * coeff_count, ntt_tables[i]);
-
-            // c0 = as + noise
-            add_poly_coeffmod(
-                    noise.get() + i * coeff_count, c0 + i * coeff_count, coeff_count, coeff_modulus[i],
-                    c0 + i * coeff_count);
-            // (as + noise, a) -> (-(as + noise), a),
-            negate_poly_coeffmod(c0 + i * coeff_count, coeff_count, coeff_modulus[i], c0 + i * coeff_count);
-        }
-
-    }
-
     void Encryptor::encrypt_symmetric_ckks_internal(
-            const Plaintext &plain, Ciphertext &destination, Ciphertext &c1) const {
+            const Plaintext &plain, Ciphertext &destination, Ciphertext &c1) {
         if (!is_metadata_valid_for(secret_key_, context_))
         {
             throw logic_error("secret key is not set");
         }
 
         // Verify that plain is valid
-        if (!is_valid_for(plain, context_))
-        {
-            throw invalid_argument("plain is not valid for encryption parameters");
-        }
+//        if (!is_valid_for(plain, context_))
+//        {
+//            throw invalid_argument("plain is not valid for encryption parameters");
+//        }
 
         if (!plain.is_ntt_form())
         {
@@ -413,16 +372,42 @@ namespace sigma
 
         auto &context_data = *context_.get_context_data(plain.parms_id());
         auto &parms = context_data.parms();
-        size_t coeff_modulus_size = parms.coeff_modulus().size();
-        size_t coeff_count = parms.poly_modulus_degree();
-        encrypt_zero_symmetric_ckks(secret_key_, context_, plain.parms_id(), destination, c1.data());
-
         auto &coeff_modulus = parms.coeff_modulus();
+        auto &device_coeff_modulus = parms.device_coeff_modulus();
+        auto ntt_tables = context_data.device_small_ntt_tables().get();
+        size_t coeff_modulus_size = coeff_modulus.size();
+        size_t coeff_count = parms.poly_modulus_degree();
 
-        // The plaintext gets added into the c_0 term of ciphertext (c_0,c_1).
-        ConstRNSIter plain_iter(plain.data(), coeff_count);
-        RNSIter destination_iter = *iter(destination);
-        add_poly_coeffmod(destination_iter, plain_iter, coeff_modulus_size, coeff_modulus, destination_iter);
+        destination.resize(context_, plain.parms_id(), 1);
+        destination.is_ntt_form() = true;
+        destination.scale() = 1.0;
+        destination.correction_factor() = 1;
+        destination.alloc_device_data();
+
+        uint64_t *c0 = destination.device_data();
+
+        if (!random_generator_) {
+            random_generator_ = new RandomGenerator();
+        }
+
+        auto noise = DeviceArray<uint64_t>(coeff_count * coeff_modulus_size);
+        kernel_util::sample_poly_cbd(random_generator_, device_coeff_modulus.get(), coeff_modulus_size, coeff_count, noise.get());
+
+        auto plain_data = plain.device_data();
+        auto c1_device_data = c1.device_data();
+
+        for (size_t i = 0; i < coeff_modulus_size; i++) {
+            kernel_util::dyadic_product_coeffmod(
+                    secret_key_.data().device_data() + i * coeff_count, c1_device_data + i * coeff_count,
+                    coeff_count, 1, 1, coeff_modulus[i], c0 + i * coeff_count);
+
+            // Transform the noise e into NTT representation
+            kernel_util::g_ntt_negacyclic_harvey(noise.get() + i * coeff_count, coeff_count, ntt_tables[i]);
+
+            kernel_util::add_negate_add_poly_coeffmod(
+                    noise.get() + i * coeff_count, c0 + i * coeff_count, plain_data + i * coeff_count,
+                    coeff_count, coeff_modulus[i].value(), c0 + i * coeff_count);
+        }
 
         destination.scale() = plain.scale();
 

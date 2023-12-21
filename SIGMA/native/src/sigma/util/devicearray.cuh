@@ -76,200 +76,168 @@ namespace sigma::util {
     };
 
     template<typename T>
-    class DeviceObject {
-        T *ptr;
-    public:
-        DeviceObject(T *p) : ptr(p) {}
-
-        DeviceObject() : ptr(nullptr) {}
-
-        DeviceObject(const DeviceObject<T> &copy) {
-            if (!copy.isNull()) {
-                ptr = KernelProvider::malloc<T>(1);
-                KernelProvider::copyOnDevice(ptr, copy.get(), 1);
-            }
-        }
-
-        DeviceObject(DeviceObject &&move) {
-            ptr = move.ptr;
-            move.ptr = nullptr;
-        }
-
-        DeviceObject &operator=(const DeviceObject &copy) {
-            if (copy.isNull()) {
-                if (ptr) KernelProvider::free(ptr);
-                ptr = nullptr;
-            } else {
-                if (!ptr) ptr = KernelProvider::malloc<T>(1);
-                KernelProvider::copyOnDevice(ptr, copy.get(), 1);
-            }
-            return *this;
-        }
-
-        DeviceObject &operator=(DeviceObject &&move) {
-            if (ptr) KernelProvider::free(ptr);
-            ptr = move.ptr;
-            move.ptr = nullptr;
-            return *this;
-        }
-
-        bool isNull() const { return ptr == nullptr; }
-
-        operator bool() const {
-            return !isNull();
-        }
-
-        ~DeviceObject() {
-            if (ptr) KernelProvider::free(ptr);
-        }
-
-        const T *get() { return ptr; }
-
-        T *get() const { return ptr; }
-
-        DeviceObject(const HostObject<T> &hostobject) {
-            ptr = KernelProvider::malloc<T>(1);
-            KernelProvider::copy(ptr, hostobject.get(), 1);
-        }
-
-        HostObject<T> toHost() {
-            auto r = malloc(sizeof(T));
-            KernelProvider::retrieve(r, ptr, 1);
-            return HostObject<T>(r);
-        }
-    };
-
-    template<typename T>
     class DeviceArray {
-        T *data;
-        size_t len;
+        T *data_;
+        size_t len_;
     public:
         DeviceArray() {
-            data = nullptr;
-            len = 0;
+            data_ = nullptr;
+            len_ = 0;
         }
 
-        DeviceArray(size_t cnt) {
-            data = KernelProvider::malloc<T>(cnt);
-            len = cnt;
+        explicit DeviceArray(size_t cnt) {
+            data_ = KernelProvider::malloc<T>(cnt);
+            len_ = cnt;
         }
 
-        size_t length() const { return len; }
+        SIGMA_NODISCARD size_t length() const {
+            return len_;
+        }
 
-        size_t size() const { return len; }
+        SIGMA_NODISCARD size_t size() const {
+            return len_;
+        }
 
         // 保留bool allocate编译不通过以提醒
         DeviceArray(T *data, size_t length, bool allocate) {
             if (allocate) {
-                this->len = length;
-                this->data = KernelProvider::malloc<T>(len);
-                KernelProvider::copy(this->data, data, len);
+                len_ = length;
+                data_ = KernelProvider::malloc<T>(len_);
+                KernelProvider::copy(data_, data, len_);
             } else {
-                this->data = data;
-                this->len = length;
+                data_ = data;
+                len_ = length;
             }
         }
 
         DeviceArray(DeviceArray &&a) {
-            data = a.data;
-            len = a.len;
-            a.data = nullptr;
-            a.len = 0;
+            data_ = a.data_;
+            len_ = a.len_;
+            a.data_ = nullptr;
+            a.len_ = 0;
         }
 
         DeviceArray &operator=(DeviceArray &&a) {
-            if (data) {
-                KernelProvider::free(data);
+            if (data_) {
+                KernelProvider::free(data_);
             }
-            data = a.data;
-            len = a.len;
-            a.data = nullptr;
-            a.len = 0;
+            data_ = a.data_;
+            len_ = a.len_;
+            a.data_ = nullptr;
+            a.len_ = 0;
             return *this;
         }
 
         DeviceArray(const HostArray<T> &host) {
-            len = host.length();
-            data = KernelProvider::malloc<T>(len);
-            KernelProvider::copy(data, host.get(), len);
+            len_ = host.length();
+            data_ = KernelProvider::malloc<T>(len_);
+            KernelProvider::copy(data_, host.get(), len_);
         }
 
         ~DeviceArray() {
-            if (data) {
-                KernelProvider::free(data);
-            }
+            release();
         }
 
         DeviceArray copy() const {
-            T *copied = KernelProvider::malloc<T>(len);
-            KernelProvider::copyOnDevice<T>(copied, data, len);
-            return DeviceArray(copied, len);
+            T *copied = KernelProvider::malloc<T>(len_);
+            KernelProvider::copyOnDevice<T>(copied, data_, len_);
+            return DeviceArray(copied, len_);
         }
 
         DeviceArray &operator=(const DeviceArray &r) {
-            if (data) {
-                KernelProvider::free(data);
+            if (data_) {
+                KernelProvider::free(data_);
             }
-            len = r.len;
-            data = KernelProvider::malloc<T>(len);
-            KernelProvider::copyOnDevice<T>(data, r.data, len);
+            len_ = r.len_;
+            data_ = KernelProvider::malloc<T>(len_);
+            KernelProvider::copyOnDevice<T>(data_, r.data_, len_);
             return *this;
         }
 
         DeviceArray(const DeviceArray &r) {
-            len = r.len;
-            if (len > 0) {
-                data = KernelProvider::malloc<T>(len);
-                KernelProvider::copyOnDevice<T>(data, r.data, len);
+            len_ = r.len_;
+            if (len_ > 0) {
+                data_ = KernelProvider::malloc<T>(len_);
+                KernelProvider::copyOnDevice<T>(data_, r.data_, len_);
             } else {
-                data = nullptr;
+                data_ = nullptr;
             }
         }
 
         HostArray<T> toHost() const {
-            T *ret = new T[len];
-            KernelProvider::retrieve(ret, data, len);
-            return HostArray<T>(ret, len);
+            T *ret = new T[len_];
+            KernelProvider::retrieve(ret, data_, len_);
+            return HostArray<T>(ret, len_);
         }
 
         __host__ __device__
         T *get() {
-            return data;
+            return data_;
         }
 
         __host__ __device__
         const T *get() const {
-            return data;
+            return data_;
         }
 
-        DevicePointer<T> asPointer() { return DevicePointer<T>(data); }
+        inline void release() {
+            if (data_) {
+                KernelProvider::free(data_);
+            }
+            data_ = nullptr;
+            len_ = 0;
+        }
 
-        ConstDevicePointer<T> asPointer() const { return ConstDevicePointer<T>(data); }
+        void resize(size_t size) {
+            if (len_ == size) {
+                return;
+            }
+            if (data_) {
+                KernelProvider::free(data_);
+            }
+            data_ = KernelProvider::malloc<T>(size);
+            len_ = size;
+        }
+
+        void set_data(T *data, size_t length) {
+            data_ = data;
+            len_ = length;
+        }
+
+        void set_host_data(const T *data, size_t length) {
+            len_ = length;
+            data_ = KernelProvider::malloc<T>(len_);
+            KernelProvider::copy(data_, data, len_);
+        }
+
+        DevicePointer<T> asPointer() { return DevicePointer<T>(data_); }
+
+        ConstDevicePointer<T> asPointer() const { return ConstDevicePointer<T>(data_); }
 
         DevicePointer<T> operator+(size_t d) {
-            return DevicePointer(data + d);
+            return DevicePointer(data_ + d);
         }
 
         ConstDevicePointer<T> operator+(size_t d) const {
-            return ConstDevicePointer(data + d);
+            return ConstDevicePointer(data_ + d);
         }
 
         __device__ inline T deviceAt(size_t id) const {
-            return data[id];
+            return data_[id];
         }
 
         __device__ inline T *deviceGet() const {
-            return data;
+            return data_;
         }
 
         T back() const {
             T ret;
-            if (data) KernelProvider::retrieve(&ret, data + len - 1, 1);
+            if (data_) KernelProvider::retrieve(&ret, data_ + len_ - 1, 1);
             return ret;
         }
 
         bool isNull() const {
-            return data == nullptr;
+            return data_ == nullptr;
         }
 
     };

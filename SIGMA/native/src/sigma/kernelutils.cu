@@ -1,494 +1,97 @@
+
 #include "kernelutils.cuh"
-#include "assert.h"
-
-#define KERNEL_CALL(funcname, n) size_t block_count = ceilDiv_(n, 256); funcname<<<block_count, 256>>>
-#define POLY_ARRAY_ARGUMENTS size_t poly_size, size_t coeff_modulus_size, size_t poly_modulus_degree
-#define POLY_ARRAY_ARGCALL poly_size, coeff_modulus_size, poly_modulus_degree
-#define GET_INDEX size_t gindex = blockDim.x * blockIdx.x + threadIdx.x
-#define GET_INDEX_COND_RETURN(n) size_t gindex = blockDim.x * blockIdx.x + threadIdx.x; if (gindex >= (n)) return
-#define FOR_N(name, count) for (size_t name = 0; name < count; name++)
-
+#include "util/randomgenerator.cuh"
 
 namespace sigma::kernel_util {
 
-    __global__ void gAddPolyCoeffmod(
+    template<uint step>
+    __global__ void g_dyadic_product_coeffmod(
             const uint64_t *operand1,
             const uint64_t *operand2,
-            POLY_ARRAY_ARGUMENTS,
-            const Modulus *modulus,
-            uint64_t *result
-    ) {
-        GET_INDEX_COND_RETURN(poly_modulus_degree);
-        FOR_N(rns_index, coeff_modulus_size) {
-            const uint64_t modulusValue = DeviceHelper::getModulusValue(modulus[rns_index]);
-            FOR_N(poly_index, poly_size) {
-                size_t id = (poly_index * coeff_modulus_size + rns_index) * poly_modulus_degree + gindex;
-                uint64_t sum = operand1[id] + operand2[id];
-                result[id] = sum >= modulusValue ? sum - modulusValue : sum;
-            }
-        }
-    }
-
-    void kAddPolyCoeffmod(
-            CPointer operand1,
-            CPointer operand2,
-            POLY_ARRAY_ARGUMENTS,
-            MPointer modulus,
-            DevicePointer<uint64_t> result
-    ) {
-        KERNEL_CALL(gAddPolyCoeffmod, poly_modulus_degree)(
-                operand1.get(), operand2.get(),
-                POLY_ARRAY_ARGCALL, modulus.get(), result.get()
-        );
-    }
-
-    __device__ inline uint64_t
-    dDyadicSingle(uint64_t o1, uint64_t o2, uint64_t modulus_value, uint64_t const_ratio_0, uint64_t const_ratio_1) {
-
-        uint64_t z[2], tmp1, tmp2[2], tmp3, carry;
-
-        // Reduces z using base 2^64 Barrett reduction
-        dMultiplyUint64(o1, o2, z);
-
-        // Multiply input and const_ratio
-        // Round 1
-        d_multiply_uint64_hw64(z[0], const_ratio_0, &carry);
-        dMultiplyUint64(z[0], const_ratio_1, tmp2);
-        tmp3 = tmp2[1] + dAddUint64(tmp2[0], carry, &tmp1);
-
-        // Round 2
-        dMultiplyUint64(z[1], const_ratio_0, tmp2);
-        carry = tmp2[1] + dAddUint64(tmp1, tmp2[0], &tmp1);
-
-        // This is all we care about
-        tmp1 = z[1] * const_ratio_1 + tmp3 + carry;
-
-        // Barrett subtraction
-        tmp3 = z[0] - tmp1 * modulus_value;
-
-        // Claim: One more subtraction is enough
-        uint64_t sum = ((tmp3 >= modulus_value) ? (tmp3 - modulus_value) : (tmp3));
-        return sum;
-    }
-
-    __global__ void gDyadicConvolutionCoeffmod(
-            const uint64_t *operand1,
-            const uint64_t *operand2_reversed,
-            POLY_ARRAY_ARGUMENTS,
-            const Modulus *moduli,
-            uint64_t *single_poly_result_accumulator
-    ) {
-        GET_INDEX_COND_RETURN(poly_modulus_degree);
-        FOR_N(rns_index, coeff_modulus_size) {
-            const uint64_t modulus_value = DeviceHelper::getModulusValue(moduli[rns_index]);
-            const uint64_t const_ratio_0 = DeviceHelper::getModulusConstRatio(moduli[rns_index])[0];
-            const uint64_t const_ratio_1 = DeviceHelper::getModulusConstRatio(moduli[rns_index])[1];
-            FOR_N(poly_index, poly_size) {
-
-                const uint64_t *o1 = operand1
-                                     + (poly_index * coeff_modulus_size + rns_index) * poly_modulus_degree + gindex;
-                const uint64_t *o2 = operand2_reversed - poly_index * coeff_modulus_size * poly_modulus_degree
-                                     + rns_index * poly_modulus_degree + gindex;
-                uint64_t *res = single_poly_result_accumulator
-                                + rns_index * poly_modulus_degree + gindex;
-
-                // Claim: One more subtraction is enough
-                uint64_t sum = *res + dDyadicSingle(*o1, *o2, modulus_value, const_ratio_0, const_ratio_1);
-                *res = sum >= modulus_value ? sum - modulus_value : sum;
-            }
-        }
-    }
-
-    void kDyadicConvolutionCoeffmod(
-            CPointer operand1,
-            CPointer operand2_reversed,
-            POLY_ARRAY_ARGUMENTS,
-            MPointer moduli,
-            DevicePointer<uint64_t> single_poly_result_accumulator
-    ) {
-        KERNEL_CALL(gDyadicConvolutionCoeffmod, poly_modulus_degree)(
-                operand1.get(),
-                operand2_reversed.get(),
-                POLY_ARRAY_ARGCALL,
-                moduli.get(), single_poly_result_accumulator.get()
-        );
-    }
-
-    __global__ void gDyadicProductCoeffmod(
-            const uint64_t *operand1,
-            const uint64_t *operand2,
-            POLY_ARRAY_ARGUMENTS,
-            const Modulus *moduli,
-            uint64_t *output
-    ) {
-        GET_INDEX_COND_RETURN(poly_modulus_degree);
-        FOR_N(rns_index, coeff_modulus_size) {
-            const uint64_t modulus_value = DeviceHelper::getModulusValue(moduli[rns_index]);
-            const uint64_t const_ratio_0 = DeviceHelper::getModulusConstRatio(moduli[rns_index])[0];
-            const uint64_t const_ratio_1 = DeviceHelper::getModulusConstRatio(moduli[rns_index])[1];
-            FOR_N(poly_index, poly_size) {
-                size_t id = (poly_index * coeff_modulus_size + rns_index) * poly_modulus_degree + gindex;
-                output[id] = dDyadicSingle(operand1[id], operand2[id], modulus_value, const_ratio_0, const_ratio_1);
-            }
-        }
-    }
-
-    void kDyadicProductCoeffmod(
-            CPointer operand1,
-            CPointer operand2,
-            POLY_ARRAY_ARGUMENTS,
-            MPointer moduli,
-            DevicePointer<uint64_t> output
-    ) {
-        KERNEL_CALL(gDyadicProductCoeffmod, poly_modulus_degree)(
-                operand1.get(),
-                operand2.get(),
-                POLY_ARRAY_ARGCALL,
-                moduli.get(), output.get()
-        );
-    }
-
-    __global__ void gDyadicSquareCoeffmod(
-            const uint64_t *operand,
-            size_t coeff_modulus_size,
-            size_t poly_modulus_degree,
-            const Modulus *moduli,
-            uint64_t *output
-    ) {
-        GET_INDEX_COND_RETURN(poly_modulus_degree);
-        size_t d = coeff_modulus_size * poly_modulus_degree;
-        FOR_N(rns_index, coeff_modulus_size) {
-            const uint64_t modulus_value = DeviceHelper::getModulusValue(moduli[rns_index]);
-            const uint64_t const_ratio_0 = DeviceHelper::getModulusConstRatio(moduli[rns_index])[0];
-            const uint64_t const_ratio_1 = DeviceHelper::getModulusConstRatio(moduli[rns_index])[1];
-            size_t id = rns_index * poly_modulus_degree + gindex;
-            output[2 * d + id] = dDyadicSingle(operand[1 * d + id], operand[1 * d + id], modulus_value, const_ratio_0,
-                                               const_ratio_1);
-            uint64_t cross = dDyadicSingle(operand[0 * d + id], operand[1 * d + id], modulus_value, const_ratio_0,
-                                           const_ratio_1);
-            cross += cross;
-            output[1 * d + id] = cross >= modulus_value ? cross - modulus_value : cross;
-            output[0 * d + id] = dDyadicSingle(operand[0 * d + id], operand[0 * d + id], modulus_value, const_ratio_0,
-                                               const_ratio_1);
-        }
-    }
-
-    void kDyadicSquareCoeffmod(
-            CPointer operand,
-            size_t coeff_modulus_size,
-            size_t poly_modulus_degree,
-            MPointer moduli,
-            DevicePointer<uint64_t> output
-    ) {
-        KERNEL_CALL(gDyadicSquareCoeffmod, poly_modulus_degree)(
-                operand.get(), coeff_modulus_size, poly_modulus_degree,
-                moduli.get(), output.get()
-        );
-    }
-
-    __global__ void gModBoundedUsingNttTables(
-            uint64_t *operand,
-            POLY_ARRAY_ARGUMENTS,
-            const util::NTTTables *ntt_tables) {
-        GET_INDEX_COND_RETURN(poly_modulus_degree);
-        FOR_N(rns_index, coeff_modulus_size) {
-            uint64_t modulus_value = DeviceHelper::getModulusValue(ntt_tables[rns_index].modulus());
-            uint64_t twice_modulus_value = modulus_value << 1;
-            FOR_N(poly_index, poly_size) {
-                size_t id = (poly_index * coeff_modulus_size + rns_index) * poly_modulus_degree + gindex;
-                if (operand[id] >= twice_modulus_value) operand[id] -= twice_modulus_value;
-                if (operand[id] >= modulus_value) operand[id] -= modulus_value;
-            }
-        }
-    }
-
-    void kModBoundedUsingNttTables(
-            uint64_t *operand,
-            POLY_ARRAY_ARGUMENTS,
-            ConstDevicePointer<util::NTTTables> ntt_tables) {
-        KERNEL_CALL(gModBoundedUsingNttTables, poly_modulus_degree)(
-                operand, POLY_ARRAY_ARGCALL, ntt_tables.get()
-        );
-    }
-
-    __global__ void gModuloPolyCoeffs(
-            const uint64_t *operand,
-            POLY_ARRAY_ARGUMENTS,
-            const Modulus *moduli,
-            uint64_t *result
-    ) {
-        GET_INDEX_COND_RETURN(poly_modulus_degree);
-        FOR_N(rns_index, coeff_modulus_size) {
-            FOR_N(poly_index, poly_size) {
-                size_t id = (poly_index * coeff_modulus_size + rns_index) * poly_modulus_degree + gindex;
-                result[id] = d_barrett_reduce_64(operand[id], moduli[rns_index]);
-            }
-        }
-    }
-
-    void kModuloPolyCoeffs(
-            CPointer operand,
-            POLY_ARRAY_ARGUMENTS,
-            MPointer moduli,
-            DevicePointer<uint64_t> result
-    ) {
-        KERNEL_CALL(gModuloPolyCoeffs, poly_modulus_degree)(
-                operand.get(),
-                POLY_ARRAY_ARGCALL,
-                moduli.get(), result.get()
-        );
-    }
-
-    __global__ void gMultiplyInvDegreeNttTables(
-            uint64_t *poly_array,
-            POLY_ARRAY_ARGUMENTS,
-            const util::NTTTables *ntt_tables
-    ) {
-        GET_INDEX_COND_RETURN(poly_modulus_degree);
-        FOR_N(rns_index, coeff_modulus_size) {
-            const Modulus &modulus = ntt_tables[rns_index].modulus();
-            MultiplyUIntModOperand scalar = ntt_tables[rns_index].inv_degree_modulo();;
-            FOR_N(poly_index, poly_size) {
-                size_t id = (poly_index * coeff_modulus_size + rns_index) * poly_modulus_degree + gindex;
-                poly_array[id] = dMultiplyUintModLazy(poly_array[id], scalar, modulus);
-            }
-        }
-    }
-
-    __global__ void gMultiplyPolyScalarCoeffmod(
-            const uint64_t *poly_array,
-            POLY_ARRAY_ARGUMENTS,
-            const MultiplyUIntModOperand *reduced_scalar,
-            const Modulus *modulus,
+            const uint64_t modulus_value,
+            const uint64_t const_ratio_0,
+            const uint64_t const_ratio_1,
             uint64_t *result) {
-        GET_INDEX_COND_RETURN(poly_modulus_degree);
-        FOR_N(rns_index, coeff_modulus_size) {
-            FOR_N(poly_index, poly_size) {
-                size_t id = (poly_index * coeff_modulus_size + rns_index) * poly_modulus_degree + gindex;
-                result[id] = dMultiplyUintMod(poly_array[id], reduced_scalar[rns_index], modulus[rns_index]);
-            }
+
+        auto tid = blockDim.x * blockIdx.x + threadIdx.x;
+
+        auto index = tid * step;
+
+        for (uint i = 0; i < step; ++i) {
+            // Reduces z using base 2^64 Barrett reduction
+            uint64_t z[2], tmp1, tmp2[2], tmp3, carry;
+            d_multiply_uint64(*(operand1 + index + i), *(operand2 + index + i), z);
+
+            // Multiply input and const_ratio
+            // Round 1
+            d_multiply_uint64_hw64(z[0], const_ratio_0, &carry);
+            d_multiply_uint64(z[0], const_ratio_1, tmp2);
+            tmp3 = tmp2[1] + d_add_uint64(tmp2[0], carry, &tmp1);
+
+            // Round 2
+            d_multiply_uint64(z[1], const_ratio_0, tmp2);
+            carry = tmp2[1] + d_add_uint64(tmp1, tmp2[0], &tmp1);
+
+            // This is all we care about
+            tmp1 = z[1] * const_ratio_1 + tmp3 + carry;
+
+            // Barrett subtraction
+            tmp3 = z[0] - tmp1 * modulus_value;
+
+            // Claim: One more subtraction is enough
+            *(result + index + i) = tmp3 >= modulus_value ? tmp3 - modulus_value : tmp3;
         }
+
     }
 
+    void dyadic_product_coeffmod_inplace(
+            uint64_t *operand1, const uint64_t *operand2,
+            size_t coeff_count, size_t ntt_size, size_t coeff_modulus_size, const Modulus &modulus) {
 
-    void kMultiplyPolyScalarCoeffmod(CPointer poly_array, POLY_ARRAY_ARGUMENTS, uint64_t scalar, MPointer modulus,
-                                     DevicePointer<uint64_t> result) {
-        util::DeviceArray<MultiplyUIntModOperand> reduced_scalar(coeff_modulus_size);
-        assert(coeff_modulus_size <= 256);
-        gSetMultiplyUIntModOperand<<<1, coeff_modulus_size>>>(scalar, modulus.get(), coeff_modulus_size,
-                                                              reduced_scalar.get());
-        KERNEL_CALL(gMultiplyPolyScalarCoeffmod, poly_modulus_degree)(
-                poly_array.get(), POLY_ARRAY_ARGCALL, reduced_scalar.get(),
-                modulus.get(), result.get()
-        );
+        // 过于耗时
+        auto operand1_device = KernelProvider::malloc<uint64_t>(coeff_count);
+        auto operand2_device = KernelProvider::malloc<uint64_t>(coeff_count);
+        KernelProvider::copy(operand1_device, operand1, coeff_count);
+        KernelProvider::copy(operand2_device, operand2, coeff_count);
+
+        const uint64_t modulus_value = modulus.value();
+        const uint64_t const_ratio_0 = modulus.const_ratio()[0];
+        const uint64_t const_ratio_1 = modulus.const_ratio()[1];
+
+        uint step = 2;
+        uint threadDim = 1024;
+        uint blockDim = coeff_count * ntt_size * coeff_modulus_size / threadDim / step;
+
+        g_dyadic_product_coeffmod<2><<<blockDim, threadDim>>>(
+                operand1_device,
+                operand2_device,
+                modulus_value,
+                const_ratio_0,
+                const_ratio_1,
+                operand1_device);
+
+        KernelProvider::retrieve(operand1, operand1_device, coeff_count);
     }
 
-    __global__ void gNegatePolyCoeffmod(
-            const uint64_t *poly_array,
-            POLY_ARRAY_ARGUMENTS,
-            const Modulus *modulus,
-            uint64_t *result
-    ) {
-        GET_INDEX_COND_RETURN(poly_modulus_degree);
-        FOR_N(rns_index, coeff_modulus_size) {
-            auto modulus_value = DeviceHelper::getModulusValue(modulus[rns_index]);
-            FOR_N(poly_index, poly_size) {
-                size_t id = (poly_index * coeff_modulus_size + rns_index) * poly_modulus_degree + gindex;
-                uint64_t coeff = poly_array[id];
-                int64_t non_zero = (coeff != 0);
-                result[id] = (modulus_value - coeff) & static_cast<uint64_t>(-non_zero);
-            }
-        }
-    }
+    void dyadic_product_coeffmod(
+            const uint64_t *operand1, const uint64_t *operand2, size_t coeff_count, size_t ntt_size,
+            size_t coeff_modulus_size, const Modulus &modulus, uint64_t *result) {
 
-    void kNttTransferFromRev(
-            DevicePointer<uint64_t> operand,
-            size_t poly_size,
-            size_t coeff_modulus_size,
-            size_t poly_modulus_degree_power,
-            ConstDevicePointer<util::NTTTables> ntt_tables,
-            bool use_inv_root_powers
-    ) {
-        std::size_t n = size_t(1) << poly_modulus_degree_power;
-        std::size_t m = n >> 1;
-        std::size_t layer = 0;
-        for (; m >= 1; m >>= 1) {
-            kNttTransferFromRevLayered(
-                    layer, operand,
-                    poly_size, coeff_modulus_size,
-                    poly_modulus_degree_power, ntt_tables,
-                    use_inv_root_powers);
-            layer++;
-        }
-        KERNEL_CALL(gMultiplyInvDegreeNttTables, n)(
-                operand.get(), poly_size, coeff_modulus_size, n, ntt_tables.get()
-        );
-    }
+        const uint64_t modulus_value = modulus.value();
+        const uint64_t const_ratio_0 = modulus.const_ratio()[0];
+        const uint64_t const_ratio_1 = modulus.const_ratio()[1];
 
-    __global__ void gNttTransferFromRevLayered(
-            size_t layer,
-            uint64_t *operand,
-            size_t poly_size,
-            size_t coeff_modulus_size,
-            size_t poly_modulus_degree_power,
-            const util::NTTTables *ntt_tables,
-            bool use_inv_root_powers
-    ) {
-        GET_INDEX_COND_RETURN(1 << (poly_modulus_degree_power - 1));
-        size_t m = 1 << (poly_modulus_degree_power - 1 - layer);
-        size_t gap_power = layer;
-        size_t gap = 1 << gap_power;
-        size_t rid = (1 << poly_modulus_degree_power) - (m << 1) + 1 + (gindex >> gap_power);
-        size_t coeff_index = ((gindex >> gap_power) << (gap_power + 1)) + (gindex & (gap - 1));
-        // printf("m = %lu, coeff_index = %lu\n", m, coeff_index);
-        uint64_t u, v;
-        FOR_N(rns_index, coeff_modulus_size) {
-            const Modulus &modulus = ntt_tables[rns_index].modulus();
-            uint64_t two_times_modulus = DeviceHelper::getModulusValue(modulus) << 1;
-            MultiplyUIntModOperand r = use_inv_root_powers ?
-                                       (ntt_tables[rns_index].get_from_device_inv_root_powers()[rid]) :
-                                       (ntt_tables[rns_index].get_from_device_root_powers()[rid]);
-            FOR_N(poly_index, poly_size) {
-                uint64_t *x = operand + ((poly_index * coeff_modulus_size + rns_index) << poly_modulus_degree_power) +
-                              coeff_index;
-                uint64_t *y = x + gap;
-                // printf("m=%lu,dx=%lu,u=%llu,v=%llu,r=(%llu,%llu),dr=%lu\n", m,
-                //     ((poly_index * coeff_modulus_size + rns_index) << poly_modulus_degree_power) + coeff_index,
-                //     *x, *y, r.operand, r.quotient, rid);
-                u = *x;
-                v = *y;
-                *x = (u + v > two_times_modulus) ? (u + v - two_times_modulus) : (u + v);
-                *y = dMultiplyUintModLazy(u + two_times_modulus - v, r, modulus);
-                // printf("m = %lu xid = %lu u = %llu v = %llu x = %llu y = %llu\n", m, ((poly_index * coeff_modulus_size + rns_index) << poly_modulus_degree_power) + coeff_index, u, v, *x, *y);
-            }
-        }
-    }
+        uint threadDim = 1024;
+        uint blockDim = coeff_count * ntt_size * coeff_modulus_size / threadDim / 2;
 
-    void kNttTransferFromRevLayered(
-            size_t layer,
-            DevicePointer<uint64_t> operand,
-            size_t poly_size,
-            size_t coeff_modulus_size,
-            size_t poly_modulus_degree_power,
-            ConstDevicePointer<util::NTTTables> ntt_tables,
-            bool use_inv_root_powers
-    ) {
-        std::size_t n = size_t(1) << poly_modulus_degree_power;
-        KERNEL_CALL(gNttTransferFromRevLayered, n)(
-                layer, operand.get(), poly_size, coeff_modulus_size,
-                poly_modulus_degree_power, ntt_tables.get(),
-                use_inv_root_powers
-        );
-    }
+        g_dyadic_product_coeffmod<2><<<blockDim, threadDim>>>(
+                operand1,
+                operand2,
+                modulus_value,
+                const_ratio_0,
+                const_ratio_1,
+                result);
 
-    __global__ void
-    gSetMultiplyUIntModOperand(uint64_t scalar, const Modulus *moduli, size_t n, MultiplyUIntModOperand *result) {
-        GET_INDEX_COND_RETURN(n);
-        uint64_t reduced = d_barrett_reduce_64(scalar, moduli[gindex]);
-        result[gindex].operand = reduced;
-        std::uint64_t wide_quotient[2]{0, 0};
-        std::uint64_t wide_coeff[2]{0, result[gindex].operand};
-        dDivideUint128Inplace(wide_coeff, DeviceHelper::getModulusValue(moduli[gindex]), wide_quotient);
-        result[gindex].quotient = wide_quotient[0];
-    }
-
-    __global__ void gSubPolyCoeffmod(
-            const uint64_t *operand1,
-            const uint64_t *operand2,
-            POLY_ARRAY_ARGUMENTS,
-            const Modulus *modulus,
-            uint64_t *result
-    ) {
-        GET_INDEX_COND_RETURN(poly_modulus_degree);
-        FOR_N(rns_index, coeff_modulus_size) {
-            const uint64_t modulusValue = DeviceHelper::getModulusValue(modulus[rns_index]);
-            FOR_N(poly_index, poly_size) {
-                size_t id = (poly_index * coeff_modulus_size + rns_index) * poly_modulus_degree + gindex;
-                uint64_t temp_result;
-                int64_t borrow = dSubUint64(operand1[id], operand2[id], &temp_result);
-                result[id] = temp_result + (modulusValue & static_cast<std::uint64_t>(-borrow));
-            }
-        }
-    }
-
-    void kSubPolyCoeffmod(
-            CPointer operand1,
-            CPointer operand2,
-            POLY_ARRAY_ARGUMENTS,
-            MPointer modulus,
-            DevicePointer<uint64_t> result
-    ) {
-        KERNEL_CALL(gSubPolyCoeffmod, poly_modulus_degree)(
-                operand1.get(), operand2.get(),
-                POLY_ARRAY_ARGCALL, modulus.get(), result.get()
-        );
-    }
-
-    __global__ void gNegacyclicShiftPolyCoeffmod(
-            const uint64_t *poly,
-            POLY_ARRAY_ARGUMENTS,
-            size_t shift,
-            const Modulus *modulus,
-            uint64_t *result
-    ) {
-        GET_INDEX_COND_RETURN(poly_modulus_degree);
-        uint64_t index_raw = shift + gindex;
-        uint64_t index = index_raw & (static_cast<uint64_t>(poly_modulus_degree) - 1);
-        FOR_N(rns_index, coeff_modulus_size) {
-            const uint64_t modulusValue = DeviceHelper::getModulusValue(modulus[rns_index]);
-            FOR_N(poly_index, poly_size) {
-                size_t id = (poly_index * coeff_modulus_size + rns_index) * poly_modulus_degree + gindex;
-                size_t rid = (poly_index * coeff_modulus_size + rns_index) * poly_modulus_degree + index;
-                if (shift == 0) {
-                    result[id] = poly[id];
-                } else {
-                    if (!(index_raw & static_cast<uint64_t>(poly_modulus_degree)) || !poly[id]) {
-                        result[rid] = poly[id];
-                    } else {
-                        result[rid] = modulusValue - poly[id];
-                    }
-                }
-            }
-        }
-    }
-
-
-    void kNegacyclicShiftPolyCoeffmod(
-            CPointer poly,
-            POLY_ARRAY_ARGUMENTS,
-            size_t shift,
-            MPointer modulus,
-            DevicePointer<uint64_t> result
-    ) {
-        KERNEL_CALL(gNegacyclicShiftPolyCoeffmod, poly_modulus_degree)(
-                poly.get(), POLY_ARRAY_ARGCALL, shift, modulus.get(), result.get()
-        );
-    }
-
-    __global__ void gMultiplyInvPolyDegreeCoeffmod(
-            const uint64_t *poly_array,
-            POLY_ARRAY_ARGUMENTS,
-            const util::NTTTables *ntt_tables,
-            const Modulus *modulus,
-            uint64_t *result) {
-        GET_INDEX_COND_RETURN(poly_modulus_degree);
-        FOR_N(rns_index, coeff_modulus_size) {
-            FOR_N(poly_index, poly_size) {
-                size_t id = (poly_index * coeff_modulus_size + rns_index) * poly_modulus_degree + gindex;
-                result[id] = dMultiplyUintMod(poly_array[id], ntt_tables[rns_index].inv_degree_modulo(),
-                                              modulus[rns_index]);
-            }
-        }
-    }
-
-    void kMultiplyInvPolyDegreeCoeffmod(CPointer poly_array, POLY_ARRAY_ARGUMENTS,
-                                        ConstDevicePointer<util::NTTTables> ntt_tables,
-                                        MPointer modulus, DevicePointer<uint64_t> result) {
-        assert(coeff_modulus_size <= 256);
-        KERNEL_CALL(gMultiplyInvPolyDegreeCoeffmod, poly_modulus_degree)(
-                poly_array.get(), POLY_ARRAY_ARGCALL, ntt_tables.get(),
-                modulus.get(), result.get()
-        );
     }
 
     template<unsigned l, unsigned n>
@@ -581,13 +184,13 @@ namespace sigma::kernel_util {
                 ct_ntt_inner<1, 32768><<<32768 / 1024 / 2, 1024>>>(operand, tables);
                 ct_ntt_inner<2, 32768><<<32768 / 1024 / 2, 1024>>>(operand, tables);
                 ct_ntt_inner<4, 32768><<<32768 / 1024 / 2, 1024>>>(operand, tables);
-                ct_ntt_inner_single<2, 8192><<<2, 1024, 4096 * sizeof(uint64_t)>>>(operand, tables);
+                ct_ntt_inner_single<8, 32768><<<8, 1024, 4096 * sizeof(uint64_t)>>>(operand, tables);
                 break;
             }
             case 16384: {
                 ct_ntt_inner<1, 16384><<<16384 / 1024 / 2, 1024>>>(operand, tables);
                 ct_ntt_inner<2, 16384><<<16384 / 1024 / 2, 1024>>>(operand, tables);
-                ct_ntt_inner_single<2, 8192><<<2, 1024, 4096 * sizeof(uint64_t)>>>(operand, tables);
+                ct_ntt_inner_single<4, 16384><<<4, 1024, 4096 * sizeof(uint64_t)>>>(operand, tables);
                 break;
             }
             case 8192: {
@@ -607,6 +210,60 @@ namespace sigma::kernel_util {
                 throw std::invalid_argument("not support");
         }
         CHECK(cudaGetLastError());
+    }
+
+    __device__ inline constexpr int d_hamming_weight(unsigned char value) {
+        int t = static_cast<int>(value);
+        t -= (t >> 1) & 0x55;
+        t = (t & 0x33) + ((t >> 2) & 0x33);
+        return (t + (t >> 4)) & 0x0F;
+    }
+
+    __global__
+    void g_sample_poly_cbd(const Modulus *coeff_modulus, size_t coeff_modulus_size, size_t coeff_count, uint64_t *destination) {
+
+        auto tid = blockDim.x * blockIdx.x + threadIdx.x;
+
+        auto ptr = destination + tid;
+        auto c_ptr = reinterpret_cast<unsigned char *>(ptr);
+        c_ptr[2] &= 0x1F;
+        c_ptr[5] &= 0x1F;
+        int32_t noise = d_hamming_weight(c_ptr[0]) + d_hamming_weight(c_ptr[1]) + d_hamming_weight(c_ptr[2]) -
+                d_hamming_weight(c_ptr[3]) - d_hamming_weight(c_ptr[4]) - d_hamming_weight(c_ptr[5]);
+        auto flag = static_cast<uint64_t>(-static_cast<int64_t>(noise < 0));
+        for (uint i = 0; i < coeff_modulus_size; ++i) {
+            *(ptr + i * coeff_count) = static_cast<uint64_t>(noise) + (flag & (*(coeff_modulus + i)).value());
+        }
+    }
+
+    void sample_poly_cbd(util::RandomGenerator *random_generator, const Modulus *coeff_modulus, size_t coeff_modulus_size, size_t coeff_count, uint64_t *destination) {
+
+        random_generator->generate(destination, coeff_count);
+
+        g_sample_poly_cbd<<<coeff_count / 1024, 1024>>>(coeff_modulus, coeff_modulus_size, coeff_count, destination);
+
+    }
+
+    __global__
+    void g_add_negate_poly_coeffmod(
+            const uint64_t *operand1, const uint64_t *operand2, const uint64_t *operand3, const uint64_t modulus_value,
+            uint64_t *result) {
+        auto tid = blockDim.x * blockIdx.x + threadIdx.x;
+
+        std::uint64_t sum = operand1[tid] + operand2[tid];
+        auto coeff = SIGMA_COND_SELECT(sum >= modulus_value, sum - modulus_value, sum);
+        std::int64_t non_zero = (coeff != 0);
+        coeff = (modulus_value - coeff) & static_cast<std::uint64_t>(-non_zero);
+        sum = coeff + operand3[tid];
+        result[tid] = SIGMA_COND_SELECT(sum >= modulus_value, sum - modulus_value, sum);
+    }
+
+    void add_negate_add_poly_coeffmod(
+            const uint64_t *operand1, const uint64_t *operand2, const uint64_t *operand3, std::size_t coeff_count, uint64_t modulus_value,
+            uint64_t *result) {
+
+        g_add_negate_poly_coeffmod<<<coeff_count / 1024, 1024>>>(operand1, operand2, operand3, modulus_value, result);
+
     }
 
 }

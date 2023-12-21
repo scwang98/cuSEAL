@@ -200,7 +200,7 @@ namespace sigma
 
     bool is_buffer_valid(const Plaintext &in)
     {
-        if (in.coeff_count() != in.dyn_array().size())
+        if (in.coeff_count() != in.dyn_array().size() && in.coeff_count() != in.device_array().size())
         {
             return false;
         }

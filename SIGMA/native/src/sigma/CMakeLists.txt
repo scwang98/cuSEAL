@@ -9,7 +9,7 @@ set(SIGMA_SOURCE_FILES ${SIGMA_SOURCE_FILES}
         ${CMAKE_CURRENT_LIST_DIR}/context.cpp
         ${CMAKE_CURRENT_LIST_DIR}/decryptor.cpp
         ${CMAKE_CURRENT_LIST_DIR}/encryptionparams.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/encryptor.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/encryptor.cu
         ${CMAKE_CURRENT_LIST_DIR}/evaluator.cpp
         ${CMAKE_CURRENT_LIST_DIR}/keygenerator.cpp
         ${CMAKE_CURRENT_LIST_DIR}/kswitchkeys.cpp

@@ -11,6 +11,7 @@
 #include "sigma/version.h"
 #include "sigma/util/common.h"
 #include "sigma/util/defines.h"
+#include "sigma/util/devicearray.cuh"
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -283,6 +284,7 @@ namespace sigma
             scale_ = 1.0;
             correction_factor_ = 1;
             data_.release();
+            device_data_.release();
         }
 
         /**
@@ -313,6 +315,14 @@ namespace sigma
         SIGMA_NODISCARD inline ct_coeff_type *data() noexcept
         {
             return data_.begin();
+        }
+
+        SIGMA_NODISCARD inline const auto &device_array() const noexcept {
+            return device_data_;
+        }
+
+        SIGMA_NODISCARD inline ct_coeff_type *device_data() noexcept {
+            return device_data_.get();
         }
 
         /**
@@ -698,6 +708,22 @@ namespace sigma
             return use_half_data_;
         }
 
+        inline void alloc_device_data() {
+            device_data_.resize(data_.size());
+        }
+
+        inline void copy_to_device() {
+            device_data_.set_host_data(data_.begin(), data_.size());
+        }
+
+        inline void retrieve_to_host() {
+            KernelProvider::retrieve(data_.begin(), device_data_.get(), data_.size());
+        }
+
+        inline void release_device_data() {
+            device_data_.release();
+        }
+
         /**
         Enables access to private members of sigma::Ciphertext for SIGMA_C.
         */
@@ -735,6 +761,8 @@ namespace sigma
         std::uint64_t correction_factor_ = 1;
 
         DynArray<ct_coeff_type> data_;
+
+        util::DeviceArray<ct_coeff_type> device_data_;
 
         bool use_half_data_ = false;
     };

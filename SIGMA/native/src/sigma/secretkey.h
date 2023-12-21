@@ -58,7 +58,9 @@ namespace sigma
         /**
         Destroys the SecretKey object.
         */
-        ~SecretKey() = default;
+        ~SecretKey() {
+            sk_.release();
+        }
 
         /**
         Creates a new SecretKey by moving an old one.
@@ -288,6 +290,10 @@ namespace sigma
         SIGMA_NODISCARD inline MemoryPoolHandle pool() const noexcept
         {
             return sk_.pool();
+        }
+
+        inline void copy_to_device() {
+            sk_.copy_to_device();
         }
 
     private:

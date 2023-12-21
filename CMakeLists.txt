@@ -36,6 +36,7 @@ add_executable(keygen
 target_link_libraries(keygen PRIVATE SIGMA::sigma)
 target_link_libraries(keygen PRIVATE cnpy)
 target_link_libraries(keygen PRIVATE jsoncpp)
+target_link_libraries(keygen PRIVATE -lcurand)
 
 
 add_executable(encrypt
@@ -45,6 +46,7 @@ add_executable(encrypt
 target_link_libraries(encrypt PRIVATE SIGMA::sigma)
 target_link_libraries(encrypt PRIVATE cnpy)
 target_link_libraries(encrypt PRIVATE jsoncpp)
+target_link_libraries(encrypt PRIVATE -lcurand)
 
 
 add_executable(calculate
@@ -54,6 +56,7 @@ add_executable(calculate
 target_link_libraries(calculate PRIVATE SIGMA::sigma)
 target_link_libraries(calculate PRIVATE cnpy)
 target_link_libraries(calculate PRIVATE jsoncpp)
+target_link_libraries(calculate PRIVATE -lcurand)
 
 add_executable(decrypt
         decrypt.cpp
@@ -62,3 +65,4 @@ add_executable(decrypt
 target_link_libraries(decrypt PRIVATE SIGMA::sigma)
 target_link_libraries(decrypt PRIVATE cnpy)
 target_link_libraries(decrypt PRIVATE jsoncpp)
+target_link_libraries(decrypt PRIVATE -lcurand)

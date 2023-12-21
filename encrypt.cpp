@@ -46,6 +46,8 @@ int main() {
 //    util::load_public_key(context, public_key, public_key_data_path);
     util::load_secret_key(context, secret_key, secret_key_data_path);
 
+    secret_key.copy_to_device();
+
     sigma::CKKSEncoder encoder(context);
     sigma::Encryptor encryptor(context, secret_key);
 
@@ -56,6 +58,8 @@ int main() {
     c1.save(c1_ofs);
     c1_ofs.close();
 
+    c1.copy_to_device();
+
     std::ofstream ofs(encrypted_data_path, std::ios::binary);
 
     for (int i = 0; i < gallery_size; ++i) {
@@ -65,6 +69,7 @@ int main() {
         sigma::Ciphertext ciphertext;
         ciphertext.use_half_data() = true;
         encryptor.encrypt_symmetric_ckks(plain_vec, ciphertext, c1);
+        ciphertext.retrieve_to_host();
         ciphertext.save(ofs);
 //        std::cout << "encrypt end " << i << std::endl;  // TODO: remove @wangshuchao
     }
@@ -72,6 +77,8 @@ int main() {
     auto time_end = std::chrono::high_resolution_clock::now();
     auto time_diff = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start);
     std::cout << "Encode and encrypt end [" << time_diff.count() << " milliseconds]" << std::endl;
+
+    c1.release_device_data();
 
     ofs.close();
 

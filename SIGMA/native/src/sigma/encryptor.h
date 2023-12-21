@@ -13,10 +13,15 @@
 #include "sigma/serializable.h"
 #include "sigma/util/defines.h"
 #include "sigma/util/ntt.h"
+//#include "sigma/util/randomgenerator.cuh"
+//#include "sigma/util/ntt_60bit.cuh"
 #include <vector>
 
 namespace sigma
 {
+    namespace util {
+        class RandomGenerator;
+    }
     /**
     Encrypts Plaintext objects into Ciphertext objects. Constructing an Encryptor
     requires a SIGMAContext with valid encryption parameters, the public key and/or
@@ -80,6 +85,8 @@ namespace sigma
         @throws std::invalid_argument if public_key or secret_key is not valid
         */
         Encryptor(const SIGMAContext &context, const PublicKey &public_key, const SecretKey &secret_key);
+
+        ~Encryptor();
 
         /**
         Give a new instance of public key.
@@ -275,7 +282,7 @@ namespace sigma
         }
 
         inline void encrypt_symmetric_ckks(
-                const Plaintext &plain, Ciphertext &destination, Ciphertext &c1) const
+                const Plaintext &plain, Ciphertext &destination, Ciphertext &c1)
         {
             encrypt_symmetric_ckks_internal(plain, destination, c1);
         }
@@ -435,12 +442,14 @@ namespace sigma
 
         void sample_symmetric_ckks_c1_internal(Ciphertext &destination) const;
 
-        void encrypt_symmetric_ckks_internal(const Plaintext &plain, Ciphertext &destination, Ciphertext &c1) const;
+        void encrypt_symmetric_ckks_internal(const Plaintext &plain, Ciphertext &destination, Ciphertext &c1);
 
         SIGMAContext context_;
 
         PublicKey public_key_;
 
         SecretKey secret_key_;
+
+        util::RandomGenerator *random_generator_ = nullptr;
     };
 } // namespace sigma
