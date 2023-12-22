@@ -198,7 +198,6 @@ namespace sigma
             friend class Pointer<sigma_byte>;
             friend class ConstPointer<sigma_byte>;
             friend class ConstPointer<T>;
-            friend class DeviceArray<T>;
 
             Pointer() = default;
 
