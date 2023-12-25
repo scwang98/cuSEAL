@@ -381,7 +381,7 @@ namespace sigma
         auto &parms = context_data.parms();
         auto &coeff_modulus = parms.coeff_modulus();
         auto &device_coeff_modulus = parms.device_coeff_modulus();
-        auto ntt_tables = context_data.device_small_ntt_tables().get();
+        auto ntt_tables = context_data.device_small_ntt_tables();
         size_t coeff_modulus_size = coeff_modulus.size();
         size_t coeff_count = parms.poly_modulus_degree();
 

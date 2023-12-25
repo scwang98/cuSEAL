@@ -411,7 +411,7 @@ namespace sigma
 
         // Transform to NTT domain
         for (std::size_t i = 0; i < coeff_modulus_size; i++) {
-            kernel_util::g_ntt_negacyclic_harvey(destination.device_data() + i * coeff_count, coeff_count, ntt_tables.get()[i]);
+            kernel_util::g_ntt_negacyclic_harvey(destination.device_data() + i * coeff_count, coeff_count, ntt_tables[i]);
         }
 
         destination.parms_id() = parms_id;

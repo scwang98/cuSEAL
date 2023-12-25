@@ -33,8 +33,6 @@ namespace sigma
     class Modulus
     {
 
-        friend class DeviceHelper;
-
     public:
         /**
         Creates a Modulus instance. The value of the Modulus is set to

@@ -327,9 +327,9 @@ namespace sigma
                 return small_ntt_tables_.get();
             }
 
-            SIGMA_NODISCARD inline util::ConstDevicePointer<util::NTTTables> device_small_ntt_tables() const noexcept
+            SIGMA_NODISCARD inline const util::NTTTables *device_small_ntt_tables() const noexcept
             {
-                return device_small_ntt_tables_.asPointer();
+                return device_small_ntt_tables_.get();
             }
 
             /**
