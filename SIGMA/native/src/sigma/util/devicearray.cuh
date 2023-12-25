@@ -12,70 +12,6 @@
 namespace sigma::util {
 
     template<typename T>
-    class DevicePointer;
-
-    template<typename T>
-    class DeviceArray;
-
-    template<typename T>
-    class ConstDevicePointer {
-        const T *ptr;
-    public:
-        ConstDevicePointer() : ptr(nullptr) {}
-
-        explicit ConstDevicePointer(const T *ptr) : ptr(ptr) {}
-
-        explicit ConstDevicePointer(const DevicePointer<T> &d) : ptr(d.get()) {}
-
-        bool isNull() const { return ptr == nullptr; }
-
-        operator bool() const {
-            return !isNull();
-        }
-
-        const T *get() const { return ptr; }
-
-        ConstDevicePointer<T> operator+(size_t d) {
-            return ConstDevicePointer(ptr + d);
-        }
-
-        explicit ConstDevicePointer(const DeviceArray<T> &arr) :
-                ptr(arr.get()) {}
-    };
-
-    template<typename T>
-    class DevicePointer {
-        friend class DeviceArray<T>;
-
-        T *ptr;
-    public:
-        DevicePointer(T *ptr) : ptr(ptr) {}
-
-        DevicePointer(DeviceArray<T> &r) : ptr(r.get()) {}
-
-        DevicePointer() {
-            ptr = nullptr;
-        }
-
-        bool isNull() { return ptr == nullptr; }
-
-        operator bool() const {
-            return !isNull();
-        }
-
-        const T *get() const { return ptr; }
-
-        T *get() { return ptr; }
-
-        DevicePointer<T> operator+(size_t d) { return DevicePointer(ptr + d); }
-
-        DevicePointer<T> &operator+=(size_t d) {
-            ptr += d;
-            return *this;
-        }
-    };
-
-    template<typename T>
     class DeviceArray {
         T *data_;
         size_t len_;
@@ -208,26 +144,6 @@ namespace sigma::util {
             len_ = length;
             data_ = KernelProvider::malloc<T>(len_);
             KernelProvider::copy(data_, data, len_);
-        }
-
-        DevicePointer<T> asPointer() { return DevicePointer<T>(data_); }
-
-        ConstDevicePointer<T> asPointer() const { return ConstDevicePointer<T>(data_); }
-
-        DevicePointer<T> operator+(size_t d) {
-            return DevicePointer(data_ + d);
-        }
-
-        ConstDevicePointer<T> operator+(size_t d) const {
-            return ConstDevicePointer(data_ + d);
-        }
-
-        __device__ inline T deviceAt(size_t id) const {
-            return data_[id];
-        }
-
-        __device__ inline T *deviceGet() const {
-            return data_;
         }
 
         T back() const {
