@@ -36,6 +36,8 @@ namespace sigma
         size_t coeff_count = parms.poly_modulus_degree();
         size_t coeff_modulus_size = coeff_modulus.size();
 
+        temp_noise_.resize(coeff_count * coeff_modulus_size);
+
         // Quick sanity check
         if (!product_fits_in(coeff_count, coeff_modulus_size, size_t(2)))
         {
@@ -57,6 +59,8 @@ namespace sigma
         auto &coeff_modulus = parms.coeff_modulus();
         size_t coeff_count = parms.poly_modulus_degree();
         size_t coeff_modulus_size = coeff_modulus.size();
+
+        temp_noise_.resize(coeff_count * coeff_modulus_size);
 
         // Quick sanity check
         if (!product_fits_in(coeff_count, coeff_modulus_size, size_t(2)))
@@ -81,6 +85,8 @@ namespace sigma
         auto &coeff_modulus = parms.coeff_modulus();
         size_t coeff_count = parms.poly_modulus_degree();
         size_t coeff_modulus_size = coeff_modulus.size();
+
+        temp_noise_.resize(coeff_count * coeff_modulus_size);
 
         // Quick sanity check
         if (!product_fits_in(coeff_count, coeff_modulus_size, size_t(2)))
@@ -348,6 +354,7 @@ namespace sigma
 
     void Encryptor::encrypt_symmetric_ckks_internal(
             const Plaintext &plain, Ciphertext &destination, Ciphertext &c1) {
+//        auto time_start0 = std::chrono::high_resolution_clock::now();
         if (!is_metadata_valid_for(secret_key_, context_))
         {
             throw logic_error("secret key is not set");
@@ -390,8 +397,8 @@ namespace sigma
             random_generator_ = new RandomGenerator();
         }
 
-        auto noise = DeviceArray<uint64_t>(coeff_count * coeff_modulus_size);
-        kernel_util::sample_poly_cbd(random_generator_, device_coeff_modulus.get(), coeff_modulus_size, coeff_count, noise.get());
+//        auto noise = DeviceArray<uint64_t>(coeff_count * coeff_modulus_size);
+        kernel_util::sample_poly_cbd(random_generator_, device_coeff_modulus.get(), coeff_modulus_size, coeff_count, temp_noise_.get());
 
         auto plain_data = plain.device_data();
         auto c1_device_data = c1.device_data();
@@ -402,14 +409,17 @@ namespace sigma
                     coeff_count, 1, 1, coeff_modulus[i], c0 + i * coeff_count);
 
             // Transform the noise e into NTT representation
-            kernel_util::g_ntt_negacyclic_harvey(noise.get() + i * coeff_count, coeff_count, ntt_tables[i]);
+            kernel_util::g_ntt_negacyclic_harvey(temp_noise_.get() + i * coeff_count, coeff_count, ntt_tables[i]);
 
             kernel_util::add_negate_add_poly_coeffmod(
-                    noise.get() + i * coeff_count, c0 + i * coeff_count, plain_data + i * coeff_count,
+                    temp_noise_.get() + i * coeff_count, c0 + i * coeff_count, plain_data + i * coeff_count,
                     coeff_count, coeff_modulus[i].value(), c0 + i * coeff_count);
         }
 
         destination.scale() = plain.scale();
 
+//        auto time_end0 = std::chrono::high_resolution_clock::now();
+//        auto time_diff0 = std::chrono::duration_cast<std::chrono::microseconds >(time_end0 - time_start0);
+//        std::cout << "encryptor inner file end [" << time_diff0.count() << " microseconds]" << std::endl;
     }
 } // namespace sigma

@@ -2,6 +2,7 @@
 // Licensed under the MIT license.
 
 #include "sigma/evaluator.h"
+#include "sigma/kernelutils.cuh"
 #include "sigma/util/common.h"
 #include "sigma/util/galois.h"
 #include "sigma/util/numth.h"
@@ -1967,6 +1968,9 @@ namespace sigma
             throw invalid_argument("pool is uninitialized");
         }
 
+//        std::cout << "Encode and encrypt start" << std::endl;
+//        auto time_start = std::chrono::high_resolution_clock::now();
+
         if (encrypted.is_ntt_form() && plain.is_ntt_form())
         {
             multiply_plain_ntt(encrypted, plain);
@@ -1987,6 +1991,10 @@ namespace sigma
             multiply_plain_ntt(encrypted, plain);
             transform_from_ntt_inplace(encrypted);
         }
+
+//        auto time_end = std::chrono::high_resolution_clock::now();
+//        auto time_diff = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
+//        std::cout << "Encode and encrypt end [" << time_diff.count() << " microseconds]" << std::endl;
 
 #ifdef SIGMA_THROW_ON_TRANSPARENT_CIPHERTEXT
         // Transparent ciphertext output is not allowed.
@@ -2160,10 +2168,22 @@ namespace sigma
             throw logic_error("invalid parameters");
         }
 
+//        std::cout << "Encode and encrypt start" << std::endl;
+//        auto time_start = std::chrono::high_resolution_clock::now();
+
+
         ConstRNSIter plain_ntt_iter(plain_ntt.data(), coeff_count);
         SIGMA_ITERATE(iter(encrypted_ntt), encrypted_ntt_size, [&](auto I) {
             dyadic_product_coeffmod(I, plain_ntt_iter, coeff_modulus_size, coeff_modulus, I);
         });
+        // TODO: support multi modulus coeff_modulus
+//        kernel_util::dyadic_product_coeffmod_inplace(
+//                encrypted_ntt.data(), plain_ntt.data(),
+//                coeff_count, encrypted_ntt_size, coeff_modulus_size, coeff_modulus[0]);
+
+//        auto time_end = std::chrono::high_resolution_clock::now();
+//        auto time_diff = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
+//        std::cout << "Encode and encrypt end [" << time_diff.count() << " microseconds]" << std::endl;
 
         // Set the scale
         encrypted_ntt.scale() *= plain_ntt.scale();

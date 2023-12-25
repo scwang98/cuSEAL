@@ -75,21 +75,11 @@ namespace sigma
         }
         inv_root_powers_ = host_inv_root_power;
 
+        temp_values_.resize(slots_);
+        temp_com_values_.resize(coeff_count);
+
         complex_arith_ = ComplexArith();
         fft_handler_ = FFTHandler(complex_arith_);
-    }
-
-    __global__ void g_set_conj_values_complex(
-            const cuDoubleComplex* values,
-            size_t values_size,
-            size_t slots,
-            cuDoubleComplex* conj_values,
-            const uint64_t* matrix_reps_index_map
-    ) {
-        GET_INDEX_COND_RETURN(values_size);
-        auto value = values[gindex];
-        conj_values[matrix_reps_index_map[gindex]] = value;
-        conj_values[matrix_reps_index_map[gindex + slots]] = cuConj(value);
     }
 
     __global__ void g_set_conj_values_double(
@@ -99,218 +89,247 @@ namespace sigma
             cuDoubleComplex* conj_values,
             const uint64_t* matrix_reps_index_map
     ) {
-        GET_INDEX_COND_RETURN(values_size);
-        auto value = values[gindex];
-        conj_values[matrix_reps_index_map[gindex]] = {value, 0};
-        conj_values[matrix_reps_index_map[gindex + slots]] = {value, -0};
+        size_t tid = blockDim.x * blockIdx.x + threadIdx.x;
+        auto value = tid >= values_size ? 0 : values[tid];
+        conj_values[matrix_reps_index_map[tid]] = {value, 0};
+        conj_values[matrix_reps_index_map[tid + slots]] = {value, -0};
     }
 
-    inline void set_conj_values(
-            const complex<double>* values,
-            size_t values_size,
-            const size_t slots,
+    __global__ void g_coeff_modulus_reduce_64(
             cuDoubleComplex* conj_values,
-            const uint64_t* matrix_reps_index_map
-    ) {
-        auto device_values = util::DeviceArray<complex<double>>(values_size);
-        KernelProvider::copy(device_values.get(), values, values_size);
-        KERNEL_CALL(g_set_conj_values_complex, slots)(
-                reinterpret_cast<const cuDoubleComplex *>(device_values.get()),
-                values_size,
-                slots,
-                conj_values,
-                matrix_reps_index_map
-        );
-    }
-
-    inline void set_conj_values(
-            const double* values,
-            size_t values_size,
-            size_t slots,
-            cuDoubleComplex* conj_values,
-            const uint64_t* matrix_reps_index_map
-    ) {
-        auto start = std::chrono::high_resolution_clock::now();
-        auto device_values = util::DeviceArray<double>(values_size);
-        KernelProvider::copy(device_values.get(), values, values_size);
-        KERNEL_CALL(g_set_conj_values_double, slots)(
-                device_values.get(),
-                values_size,
-                slots,
-                conj_values,
-                matrix_reps_index_map
-        );
-    }
-
-    __global__ void gFftTransferFromRevLayered(
-            size_t layer,
-            cuDoubleComplex* operand,
-            size_t poly_modulus_degree_power,
-            const cuDoubleComplex * roots
-    ) {
-        GET_INDEX_COND_RETURN(1 << (poly_modulus_degree_power - 1));
-        size_t m = 1 << (poly_modulus_degree_power - 1 - layer);
-        size_t gap = 1 << layer;
-        size_t rid = (1 << poly_modulus_degree_power) - (m << 1) + 1 + (gindex >> layer);
-        size_t coeff_index = ((gindex >> layer) << (layer + 1)) + (gindex & (gap - 1));
-
-        cuDoubleComplex &x = operand[coeff_index];
-        cuDoubleComplex &y = operand[coeff_index + gap];
-
-        double ur = x.x, ui = x.y, vr = y.x, vi = y.y;
-        double rr = roots[rid].x, ri = roots[rid].y;
-
-        // x = u + v
-        x.x = ur + vr;
-        x.y = ui + vi;
-
-        // y = (u-v) * r
-        ur -= vr; ui -= vi; // u <- u - v
-        y.x = ur * rr - ui * ri;
-        y.y = ur * ri + ui * rr;
-    }
-
-    __global__ void gMultiplyScalar(
-            cuDoubleComplex *operand,
             size_t n,
-            double scalar
+            size_t coeff_modulus_size,
+            const Modulus* coeff_modulus,
+            uint64_t* destination
     ) {
-        GET_INDEX_COND_RETURN(n);
-        operand[gindex].x *= scalar;
-        operand[gindex].y *= scalar;
-    }
-
-    void kFftTransferFromRev(
-            cuDoubleComplex* operand,
-            size_t poly_modulus_degree_power,
-            const cuDoubleComplex* roots,
-            double fix = 1
-    ) {
-        std::size_t n = size_t(1) << poly_modulus_degree_power;
-        std::size_t m = n >> 1; std::size_t layer = 0;
-        for(; m >= 1; m >>= 1) {
-            KERNEL_CALL(gFftTransferFromRevLayered, n >> 1)(
-                    layer,
-                    operand,
-                    poly_modulus_degree_power,
-                    roots
-            );
-            layer++;
-        }
-        if (fix != 1) {
-            KERNEL_CALL(gMultiplyScalar, n)(operand, n, fix);
-        }
-    }
-
-    __global__ void gMaxReal(
-            double* complexes,
-            size_t n_sqrt,
-            size_t n,
-            double* out
-    ) {
-        GET_INDEX_COND_RETURN(n_sqrt);
-        double m = 0;
-        FOR_N(i, n_sqrt) {
-            size_t id = gindex * n_sqrt + i;
-            if (id >= n) break;
-            if (fabs(complexes[id * 2]) > m) m = fabs(complexes[id * 2]);
-        }
-        out[gindex] = m;
-    }
-
-    __global__ void findMax(cuDoubleComplex* d_array, size_t size, double* result) {
-        int tid = blockIdx.x * blockDim.x + threadIdx.x;
-        if (tid >= size) {
+        size_t tid = blockDim.x * blockIdx.x + threadIdx.x;
+        if (tid >= (n)) {
             return;
         }
-
-        int stride = blockDim.x * gridDim.x;
-
-        double localMax = -DBL_MAX;
-
-        for (int i = tid; i < size; i += stride) {
-            if (d_array[i].x > localMax) {
-                localMax = d_array[i].x;
+        double coeff_d = round(conj_values[tid].x);
+        bool is_negative = coeff_d < 0;
+        auto coeff_u = static_cast<uint64_t>(abs(coeff_d));
+        for (int i = 0; i < coeff_modulus_size; ++i) {
+            if (is_negative) {
+                destination[tid + i * n] = kernel_util::d_negate_uint_mod(
+                        kernel_util::d_barrett_reduce_64(coeff_u, coeff_modulus[i]), coeff_modulus[i]
+                );
+            } else {
+                destination[tid + i * n] = kernel_util::d_barrett_reduce_64(coeff_u, coeff_modulus[i]);
             }
         }
+    }
 
-        // 存储局部最大值到共享内存
-        __shared__ double s_max[256]; // 256是一个线程块的最大数量
-        s_max[threadIdx.x] = localMax;
-        __syncthreads();
+    template<unsigned l, unsigned n>
+    __global__ void fft_inner(cuDoubleComplex *values, cuDoubleComplex *roots, double scalar) {
 
-        // 在每个线程块内查找局部最大值
-        int s = blockDim.x / 2;
-        while (s > 0) {
-            if (threadIdx.x < s) {
-                if (fabs(s_max[threadIdx.x]) < fabs(s_max[threadIdx.x + s])) {
-                    s_max[threadIdx.x] = fabs(s_max[threadIdx.x + s]);
-                }
+        auto global_tid = blockIdx.x * 1024 + threadIdx.x;
+        auto step = (n / l) / 2;
+        auto psi_step = global_tid / step;
+        auto target_index = psi_step * step * 2 + global_tid % step;
+
+        auto u = values[target_index];
+        auto v = values[target_index + step];
+        if (global_tid == 0) {
+            printf("step = %u\n", step);
+            printf("u = {x = %lf, y = %lf\n", u.x, u.y);
+            printf("v = {x = %lf, y = %lf\n", v.x, v.y);
+        }
+        values[target_index] = cuCadd(u, v);
+        values[target_index + step] = cuCmul(cuCsub(u, v), roots[l + psi_step]);
+        if (global_tid == 0) {
+            printf("x = {x = %lf, y = %lf\n", values[target_index].x, values[target_index].y);
+            printf("y = {x = %lf, y = %lf\n", values[target_index + step].x, values[target_index + step].y);
+        }
+    }
+
+    template<uint l, uint n>
+    __global__ void fft_inner_single(cuDoubleComplex *values, cuDoubleComplex *roots, double scalar) {
+        auto local_tid = threadIdx.x;
+
+        extern __shared__ cuDoubleComplex shared_array[];
+
+#pragma unroll
+        for (uint iteration_num = 0; iteration_num < (n / 1024 / l); iteration_num++) {
+            auto global_tid = local_tid + iteration_num * 1024;
+            shared_array[global_tid] = values[global_tid + blockIdx.x * (n / l)];
+        }
+
+        auto step = n / l;
+#pragma unroll
+        for (uint length = l; length < n; length <<= 1) {
+            step >>= 1;
+
+#pragma unroll
+            for (uint iteration_num = 0; iteration_num < (n / 1024 / l) / 2; iteration_num++) {
+                auto global_tid = local_tid + iteration_num * 1024;
+                auto psi_step = global_tid / step;
+                auto target_index = psi_step * step * 2 + global_tid % step;
+                psi_step = (global_tid + blockIdx.x * (n / l / 2)) / step;
+
+                auto u = shared_array[target_index];
+                auto v = shared_array[target_index + step];
+                shared_array[target_index] = cuCadd(u, v);
+                shared_array[target_index + step] = cuCmul(cuCsub(u, v), roots[length + psi_step]);
             }
             __syncthreads();
-            s /= 2;
         }
 
-        // 第一个线程块的线程将局部最大值存储在全局结果中
-        if (threadIdx.x == 0) {
-            result[blockIdx.x] = s_max[0];
+#pragma unroll
+        for (int iteration_num = 0; iteration_num < (n / 1024 / l); iteration_num++) {
+            auto global_tid = local_tid + iteration_num * 1024;
+
+            shared_array[global_tid].x *= scalar;
+            shared_array[global_tid].y *= scalar;
+
+            values[global_tid + blockIdx.x * (n / l)] = shared_array[global_tid];
         }
     }
 
-    __global__ void gEncodeInternalComplexArrayUtilA(
-            cuDoubleComplex* conj_values,
-            size_t n,
-            size_t coeff_modulus_size,
-            const Modulus* coeff_modulus,
-            uint64_t* destination
-    ) {
-        GET_INDEX_COND_RETURN(n);
-        double coeffd = round(conj_values[gindex].x);
-        bool is_negative = coeffd < 0;
-        uint64_t coeffu = static_cast<uint64_t>(abs(coeffd));
-        FOR_N(j, coeff_modulus_size) {
-            if (is_negative) {
-                destination[gindex + j * n] = kernel_util::dNegateUintMod(
-                        kernel_util::dBarrettReduce64(coeffu, coeff_modulus[j]), coeff_modulus[j]
-                );
-            } else {
-                destination[gindex + j * n] = kernel_util::dBarrettReduce64(coeffu, coeff_modulus[j]);
+    void fft_transform_to_rev(cuDoubleComplex *operand, size_t coeff_count, cuDoubleComplex *roots, double scalar) {
+        switch (coeff_count) {
+            case 32768: {
+                fft_inner<1, 32768><<<32768 / 1024 / 2, 1024>>>(operand, roots, scalar);
+                fft_inner<2, 32768><<<32768 / 1024 / 2, 1024>>>(operand, roots, scalar);
+                fft_inner<4, 32768><<<32768 / 1024 / 2, 1024>>>(operand, roots, scalar);
+                fft_inner<8, 32768><<<32768 / 1024 / 2, 1024>>>(operand, roots, scalar);
+                fft_inner_single<16, 32768><<<16, 1024, 2048 * sizeof(cuDoubleComplex)>>>(operand, roots, scalar);
+                break;
             }
-        }
-    }
-
-    __global__ void gEncodeInternalComplexArrayUtilB(
-            cuDoubleComplex* conj_values,
-            size_t n,
-            size_t coeff_modulus_size,
-            const Modulus* coeff_modulus,
-            uint64_t* destination
-    ) {
-        GET_INDEX_COND_RETURN(n);
-        double two_pow_64 = pow(2.0, 64);
-        double coeffd = round(conj_values[gindex].x);
-        bool is_negative = coeffd < 0;
-        coeffd = fabs(coeffd);
-        uint64_t coeffu[2] = {
-                static_cast<uint64_t>(fmod(coeffd, two_pow_64)),
-                static_cast<uint64_t>(coeffd / two_pow_64),
-        };
-        FOR_N(j, coeff_modulus_size) {
-            if (is_negative) {
-                destination[gindex + j * n] = kernel_util::dNegateUintMod(
-                        kernel_util::dBarrettReduce128(coeffu, coeff_modulus[j]), coeff_modulus[j]
-                );
-            } else {
-                destination[gindex + j * n] = kernel_util::dBarrettReduce128(coeffu, coeff_modulus[j]);
+            case 16384: {
+                fft_inner<1, 16384><<<16384 / 1024 / 2, 1024>>>(operand, roots, scalar);
+                fft_inner<2, 16384><<<16384 / 1024 / 2, 1024>>>(operand, roots, scalar);
+                fft_inner<4, 16384><<<16384 / 1024 / 2, 1024>>>(operand, roots, scalar);
+                fft_inner_single<8, 16384><<<8, 1024, 2048 * sizeof(cuDoubleComplex)>>>(operand, roots, scalar);
+                break;
             }
+            case 8192: {
+                fft_inner<1, 8192><<<8192 / 1024 / 2, 1024>>>(operand, roots, scalar);
+                fft_inner<2, 8192><<<8192 / 1024 / 2, 1024>>>(operand, roots, scalar);
+                fft_inner_single<4, 8192><<<4, 1024, 2048 * sizeof(cuDoubleComplex)>>>(operand, roots, scalar);
+                break;
+            }
+            case 4096: {
+                fft_inner<1, 4096><<<4096 / 1024 / 2, 1024>>>(operand, roots, scalar);
+                fft_inner_single<2, 4096> <<<2, 1024, 2048 * sizeof(cuDoubleComplex)>>>(operand, roots, scalar);
+                break;
+            }
+            case 2048: {
+                fft_inner_single<1, 2048> <<<1, 1024, 2048 * sizeof(cuDoubleComplex)>>>(operand, roots, scalar);
+                break;
+            }
+            default:
+                throw std::invalid_argument("not support");
+        }
+        CHECK(cudaGetLastError());
+    }
+
+    template<unsigned l, unsigned n>
+    __global__ void ifft_inner(cuDoubleComplex *values, cuDoubleComplex *roots, double scalar) {
+
+        auto global_tid = blockIdx.x * 1024 + threadIdx.x;
+        auto step = (n / l) / 2;
+        auto psi_step = global_tid / step;
+        auto target_index = psi_step * step * 2 + global_tid % step;
+
+        auto offset = n;
+#pragma unroll
+        for (uint i = l; i >= 1; i /= 2) {
+            offset -= i;
+        }
+
+        auto u = values[target_index];
+        auto v = values[target_index + step];
+        values[target_index] = cuCadd(u, v);
+        values[target_index + step] = cuCmul(cuCsub(u, v), roots[offset + psi_step]);
+    }
+
+    template<uint l, uint n>
+    __global__ void ifft_inner_single(cuDoubleComplex *values, cuDoubleComplex *roots, double scalar) {
+        auto local_tid = threadIdx.x;
+
+        extern __shared__ cuDoubleComplex shared_array[];
+
+#pragma unroll
+        for (uint iteration_num = 0; iteration_num < (n / 1024 / l); iteration_num++) {
+            auto global_tid = local_tid + iteration_num * 1024;
+            shared_array[global_tid] = values[global_tid + blockIdx.x * (n / l)];
+        }
+        __syncthreads();
+        auto step = 1;
+        uint offset = 1;
+#pragma unroll
+        for (uint length = (n / 2); length >= l; length >>= 1) {
+
+#pragma unroll
+            for (uint iteration_num = 0; iteration_num < (n / 1024 / l) / 2; iteration_num++) {
+                auto global_tid = local_tid + iteration_num * 1024;
+                auto psi_step = global_tid / step;
+                auto target_index = psi_step * step * 2 + global_tid % step;
+                psi_step = (global_tid + blockIdx.x * (n / l / 2)) / step;
+
+                auto u = shared_array[target_index];
+                auto v = shared_array[target_index + step];
+                shared_array[target_index] = cuCadd(u, v);
+                shared_array[target_index + step] = cuCmul(cuCsub(u, v), roots[offset + psi_step]);
+            }
+            step <<= 1;
+            offset += length;
+            __syncthreads();
+        }
+
+#pragma unroll
+        for (int iteration_num = 0; iteration_num < (n / 1024 / l); iteration_num++) {
+            auto global_tid = local_tid + iteration_num * 1024;
+
+            shared_array[global_tid].x *= scalar;
+            shared_array[global_tid].y *= scalar;
+
+            values[global_tid + blockIdx.x * (n / l)] = shared_array[global_tid];
         }
     }
 
-//    template <typename T, typename>
+    void fft_transform_from_rev(cuDoubleComplex *operand, size_t coeff_count, cuDoubleComplex *roots, double scalar) {
+        switch (coeff_count) {
+            case 32768: {
+                ifft_inner_single<16, 32768><<<16, 1024, 2048 * sizeof(cuDoubleComplex)>>>(operand, roots, scalar);
+                ifft_inner<8, 32768><<<32768 / 1024 / 2, 1024>>>(operand, roots, scalar);
+                ifft_inner<4, 32768><<<32768 / 1024 / 2, 1024>>>(operand, roots, scalar);
+                ifft_inner<2, 32768><<<32768 / 1024 / 2, 1024>>>(operand, roots, scalar);
+                ifft_inner<1, 32768><<<32768 / 1024 / 2, 1024>>>(operand, roots, scalar);
+                break;
+            }
+            case 16384: {
+                ifft_inner_single<8, 16384><<<8, 1024, 2048 * sizeof(cuDoubleComplex)>>>(operand, roots, scalar);
+                ifft_inner<4, 16384><<<16384 / 1024 / 2, 1024>>>(operand, roots, scalar);
+                ifft_inner<2, 16384><<<16384 / 1024 / 2, 1024>>>(operand, roots, scalar);
+                ifft_inner<1, 16384><<<16384 / 1024 / 2, 1024>>>(operand, roots, scalar);
+                break;
+            }
+            case 8192: {
+                ifft_inner_single<4, 8192><<<4, 1024, 2048 * sizeof(cuDoubleComplex)>>>(operand, roots, scalar);
+                ifft_inner<2, 8192><<<8192 / 1024 / 2, 1024>>>(operand, roots, scalar);
+                ifft_inner<1, 8192><<<8192 / 1024 / 2, 1024>>>(operand, roots, scalar);
+                break;
+            }
+            case 4096: {
+                ifft_inner_single<2, 4096> <<<2, 1024, 2048 * sizeof(cuDoubleComplex)>>>(operand, roots, scalar);
+                ifft_inner<1, 4096><<<4096 / 1024 / 2, 1024>>>(operand, roots, scalar);
+                break;
+            }
+            case 2048: {
+                ifft_inner_single<1, 2048> <<<1, 1024, 2048 * sizeof(cuDoubleComplex)>>>(operand, roots, scalar);
+                break;
+            }
+            default:
+                throw std::invalid_argument("not support");
+        }
+        CHECK(cudaGetLastError());
+    }
+
     void CKKSEncoder::encode_internal_cu(
-            const double *values, size_t values_size, parms_id_type parms_id, double scale, Plaintext &destination,
-            MemoryPoolHandle pool) const
-    {
+            const double *values, size_t values_size, parms_id_type parms_id, double scale, Plaintext &destination) {
+//        auto time_start0 = std::chrono::high_resolution_clock::now();
         // Verify parameters.
         auto context_data_ptr = context_.get_context_data(parms_id);
         if (!context_data_ptr)
@@ -325,16 +344,12 @@ namespace sigma
         {
             throw std::invalid_argument("values_size is too large");
         }
-        if (!pool)
-        {
-            throw std::invalid_argument("pool is uninitialized");
-        }
 
         auto &context_data = *context_data_ptr;
-        auto &parms = context_data.parms();
-        auto &coeff_modulus = parms.device_coeff_modulus();
+        auto &params = context_data.parms();
+        auto &coeff_modulus = params.device_coeff_modulus();
         std::size_t coeff_modulus_size = coeff_modulus.size();
-        std::size_t coeff_count = parms.poly_modulus_degree();
+        std::size_t coeff_count = params.poly_modulus_degree();
 
         // Quick sanity check
         if (!util::product_fits_in(coeff_modulus_size, coeff_count))
@@ -353,57 +368,29 @@ namespace sigma
         // values_size is guaranteed to be no bigger than slots_
         std::size_t n = util::mul_safe(slots_, std::size_t(2));
 
-        auto device_conj_values = kernel_util::kAllocateZero<cuDoubleComplex>(n);
-        auto device_values = util::DeviceArray<double>(values_size);
+        cudaEvent_t start, stop;
+        cudaEventCreate(&start);
+        cudaEventCreate(&stop);
+        cudaEventRecord(start);
 
-        auto start = std::chrono::high_resolution_clock::now();
+        KernelProvider::copy(temp_values_.get(), values, values_size);
 
-//        set_conj_values(values, values_size, slots_, device_conj_values.get(), matrix_reps_index_map_.get());
-        auto device_com_values = util::DeviceArray<double>(values_size);
-        KernelProvider::copy(device_com_values.get(), values, values_size);
-        {
-            KERNEL_CALL(g_set_conj_values_double, slots_)(
-                    device_com_values.get(),
-                    values_size,
-                    slots_,
-                    device_conj_values.get(),
-                    matrix_reps_index_map_.get()
-            );
-        }
+        cudaEventRecord(stop);
+
+//        auto time_end1 = std::chrono::high_resolution_clock::now();
+//        auto time_diff1 = std::chrono::duration_cast<std::chrono::microseconds >(time_end1 - time_start0);
+//        std::cout << "encode inner file device_com_values end [" << time_diff1.count() << " microseconds]" << std::endl;
+
+        g_set_conj_values_double<<<slots_ / 1024, 1024>>>(
+                temp_values_.get(),
+                values_size,
+                slots_,
+                temp_com_values_.get(),
+                matrix_reps_index_map_.get()
+        );
 
         double fix = scale / static_cast<double>(n);
-        kFftTransferFromRev(
-                device_conj_values.get(),
-                util::get_power_of_two(n),
-                inv_root_powers_.get(),
-                fix);
-
-        double max_coeff = 0;
-        {
-            size_t block_count = kernel_util::ceilDiv_(n, 256);
-            int sharedMemSize = 256 * sizeof(double);
-            auto* d_result = KernelProvider::malloc<double>(block_count); // 用于存储每个线程块的局部最大值
-            double h_result[block_count];
-            findMax<<<block_count, 256, sharedMemSize>>>(device_conj_values.get(), n, d_result);
-            KernelProvider::retrieve(h_result, d_result, block_count);
-            for (int i = 0; i < block_count; i++) {
-                if (h_result[i] > max_coeff) {
-                    max_coeff = h_result[i];
-                }
-            }
-            KernelProvider::free(d_result);
-        }
-
-        // Verify that the values are not too large to fit in coeff_modulus
-        // Note that we have an extra + 1 for the sign bit
-        // Don't compute logarithmis of numbers less than 1
-        int max_coeff_bit_count = static_cast<int>(std::ceil(std::log2(std::max<>(max_coeff, 1.0)))) + 1;
-        if (max_coeff_bit_count >= context_data.total_coeff_modulus_bit_count())
-        {
-            throw std::invalid_argument("encoded values are too large");
-        }
-
-        double two_pow_64 = std::pow(2.0, 64);
+        fft_transform_from_rev(temp_com_values_.get(), n, inv_root_powers_.get(), fix);
 
         // Resize destination to appropriate size
         // Need to first set parms_id to zero, otherwise resize
@@ -414,33 +401,13 @@ namespace sigma
 
         destination.device_resize(dest_size);
 
-        // Use faster decomposition methods when possible
-        if (max_coeff_bit_count <= 64)
-        {
-            KERNEL_CALL(gEncodeInternalComplexArrayUtilA, n) (
-                    device_conj_values.get(),
-                    n, coeff_modulus_size,
-                    coeff_modulus.get(),
-                    // TODO: wangshuchao
-                    destination.device_data()
-            );
-        }
-        else if (max_coeff_bit_count <= 128)
-        {
-            KERNEL_CALL(gEncodeInternalComplexArrayUtilB, n) (
-                    device_conj_values.get(),
-                    n,
-                    coeff_modulus_size,
-                    coeff_modulus.get(),
-                    destination.device_data()
-            );
-        }
-        else
-        {
-            // Slow case
-            throw std::invalid_argument("not support");
-        }
-        device_conj_values.release();
+        g_coeff_modulus_reduce_64<<<n / 1024, 1024>>>(
+                temp_com_values_.get(),
+                n,
+                coeff_modulus_size,
+                coeff_modulus.get(),
+                destination.device_data()
+        );
 
         // Transform to NTT domain
         for (std::size_t i = 0; i < coeff_modulus_size; i++) {
@@ -449,6 +416,10 @@ namespace sigma
 
         destination.parms_id() = parms_id;
         destination.scale() = scale;
+
+//        auto time_end0 = std::chrono::high_resolution_clock::now();
+//        auto time_diff0 = std::chrono::duration_cast<std::chrono::microseconds >(time_end0 - time_start0);
+//        std::cout << "encode inner file end [" << time_diff0.count() << " microseconds]" << std::endl;
     }
 
     void CKKSEncoder::encode_internal(
@@ -650,8 +621,8 @@ namespace sigma
     }
 
     void CKKSEncoder::encode_internal(const double *values, size_t values_size, parms_id_type parms_id, double scale,
-                                      Plaintext &destination, MemoryPoolHandle pool) const {
-        encode_internal_cu(values, values_size, parms_id, scale, destination, pool);
+                                      Plaintext &destination, MemoryPoolHandle pool) {
+        encode_internal_cu(values, values_size, parms_id, scale, destination);
     }
 
     void CKKSEncoder::encode_internal(const std::complex<double> *values, size_t values_size, parms_id_type parms_id,

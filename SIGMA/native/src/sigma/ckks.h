@@ -184,10 +184,9 @@ namespace sigma
             encode(values, context_.first_parms_id(), scale, destination, std::move(pool));
         }
 
-        inline void encode(
+        inline void encode_double(
                 const double *values, size_t values_size, double scale, Plaintext &destination,
-                MemoryPoolHandle pool = MemoryManager::GetPool()) const
-        {
+                MemoryPoolHandle pool = MemoryManager::GetPool()) {
             encode_internal(values, values_size, context_.first_parms_id(), scale, destination, std::move(pool));
         }
 #ifdef SIGMA_USE_MSGSL
@@ -450,22 +449,15 @@ namespace sigma
 
         void encode_internal(
                 const double *values, size_t values_size, parms_id_type parms_id, double scale, Plaintext &destination,
-                MemoryPoolHandle pool) const;
+                MemoryPoolHandle pool);
         void encode_internal(
                 const std::complex<double> *values, size_t values_size, parms_id_type parms_id, double scale, Plaintext &destination,
                 MemoryPoolHandle pool) const;
 
     private:
-//        template <
-//            typename T, typename = std::enable_if_t<
-//                            std::is_same<std::remove_cv_t<T>, double>::value ||
-//                            std::is_same<std::remove_cv_t<T>, std::complex<double>>::value>>
-//        void encode_internal_cu(
-//            const T *values, size_t values_size, parms_id_type parms_id, double scale, Plaintext &destination,
-//            MemoryPoolHandle pool) const;
+
         void encode_internal_cu(
-            const double *values, size_t values_size, parms_id_type parms_id, double scale, Plaintext &destination,
-            MemoryPoolHandle pool) const;
+            const double *values, size_t values_size, parms_id_type parms_id, double scale, Plaintext &destination);
 
         template <
             typename T, typename = std::enable_if_t<
@@ -609,6 +601,9 @@ namespace sigma
 
         util::DeviceArray<std::size_t> matrix_reps_index_map_;
         util::HostArray<std::size_t> host_matrix_reps_index_map_;
+
+        util::DeviceArray<double> temp_values_;
+        util::DeviceArray<cuDoubleComplex> temp_com_values_;
 
         ComplexArith complex_arith_;
 

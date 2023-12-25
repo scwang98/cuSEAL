@@ -177,6 +177,11 @@ namespace sigma {
             return (DeviceHelper::getModulusValue(modulus) - operand) & static_cast<std::uint64_t>(-non_zero);
         }
 
+        __device__ inline std::uint64_t d_negate_uint_mod(std::uint64_t operand, const Modulus &modulus) {
+            auto non_zero = static_cast<std::int64_t>(operand != 0);
+            return (modulus.value() - operand) & static_cast<std::uint64_t>(-non_zero);
+        }
+
         void g_ntt_negacyclic_harvey(uint64_t *operand, size_t coeff_count, const util::NTTTables &tables);
 
         void dyadic_product_coeffmod_inplace(

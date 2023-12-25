@@ -451,5 +451,7 @@ namespace sigma
         SecretKey secret_key_;
 
         util::RandomGenerator *random_generator_ = nullptr;
+
+        util::DeviceArray<uint64_t> temp_noise_;
     };
 } // namespace sigma

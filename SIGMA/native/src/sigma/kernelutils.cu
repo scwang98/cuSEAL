@@ -125,12 +125,11 @@ namespace sigma::kernel_util {
         const MultiplyUIntModOperand *roots = tables.get_from_device_root_powers();
         const Modulus &modulus = tables.modulus();
 
-        extern __shared__ uint64_t shared_array[];  // declaration of shared_array
+        extern __shared__ uint64_t shared_array[];
 
 #pragma unroll
         for (uint iteration_num = 0; iteration_num < (n / 1024 / l); iteration_num++) {
             auto global_tid = local_tid + iteration_num * 1024;
-            auto index = global_tid + blockIdx.x * (n / l);
             shared_array[global_tid] = values[global_tid + blockIdx.x * (n / l)];
         }
 

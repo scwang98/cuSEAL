@@ -16,8 +16,8 @@ const static std::string FILE_STORE_PATH = "../vectors/";
 
 int main() {
 
-    std::cout << "Encode and encrypt start" << std::endl;
-    auto time_start = std::chrono::high_resolution_clock::now();
+//    std::cout << "Encode and encrypt start" << std::endl;
+//    auto time_start = std::chrono::high_resolution_clock::now();
 
     size_t poly_modulus_degree = ConfigUtil.int64ValueForKey("poly_modulus_degree");
     size_t scale_power = ConfigUtil.int64ValueForKey("scale_power");
@@ -62,14 +62,34 @@ int main() {
 
     std::ofstream ofs(encrypted_data_path, std::ios::binary);
 
+    std::cout << "Encode and encrypt start" << std::endl;
+    auto time_start = std::chrono::high_resolution_clock::now();
+
+    sigma::Plaintext plain_vec;
+    sigma::Ciphertext ciphertext;
     for (int i = 0; i < gallery_size; ++i) {
         auto vec = gallery_ptr + (i * slots);
-        sigma::Plaintext plain_vec;
-        encoder.encode(vec, slots, scale, plain_vec);
-        sigma::Ciphertext ciphertext;
+
+        auto time_start0 = std::chrono::high_resolution_clock::now();
+
+        encoder.encode_double(vec, slots, scale, plain_vec);
+
+//        auto time_end0 = std::chrono::high_resolution_clock::now();
+//        auto time_diff0 = std::chrono::duration_cast<std::chrono::microseconds >(time_end0 - time_start0);
+//        std::cout << "encrypt file end [" << time_diff0.count() << " microseconds]" << std::endl;
+
+//        auto time_start1 = std::chrono::high_resolution_clock::now();
+
         ciphertext.use_half_data() = true;
         encryptor.encrypt_symmetric_ckks(plain_vec, ciphertext, c1);
+
         ciphertext.retrieve_to_host();
+
+//        auto time_end1 = std::chrono::high_resolution_clock::now();
+//        auto time_diff1 = std::chrono::duration_cast<std::chrono::microseconds >(time_end1 - time_start1);
+//        std::cout << "encrypt file end [" << time_diff1.count() << " microseconds]" << std::endl;
+//        std::cout << std::endl << std::endl;
+
         ciphertext.save(ofs);
 //        std::cout << "encrypt end " << i << std::endl;  // TODO: remove @wangshuchao
     }
