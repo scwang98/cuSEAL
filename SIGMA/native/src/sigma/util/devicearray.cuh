@@ -3,7 +3,7 @@
 
 #include "hostarray.h"
 #include "pointer.h"
-#include "../kernelprovider.h"
+#include "../kernelprovider.cuh"
 #include "cuda_runtime.h"
 #include <vector>
 #include <exception>
@@ -140,10 +140,26 @@ namespace sigma::util {
             len_ = length;
         }
 
+        void copy_device_data(const T *data, size_t length) {
+            if (len_ == length) {
+                KernelProvider::copyOnDevice<T>(data_, data, len_);
+            } else {
+                KernelProvider::free(data_);
+                len_ = length;
+                data_ = KernelProvider::malloc<T>(len_);
+                KernelProvider::copyOnDevice<T>(data_, data, len_);
+            }
+        }
+
         void set_host_data(const T *data, size_t length) {
-            len_ = length;
-            data_ = KernelProvider::malloc<T>(len_);
-            KernelProvider::copy(data_, data, len_);
+            if (len_ == length) {
+                KernelProvider::copy(data_, data, len_);
+            } else {
+                KernelProvider::free(data_);
+                len_ = length;
+                data_ = KernelProvider::malloc<T>(len_);
+                KernelProvider::copy(data_, data, len_);
+            }
         }
 
         T back() const {

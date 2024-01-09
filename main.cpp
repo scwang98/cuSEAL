@@ -8,97 +8,96 @@
 #include "util/vectorutil.h"
 #include "util/keyutil.h"
 
+using namespace sigma;
+using namespace std;
+
 const static std::string FILE_STORE_PATH = "../vectors/";
 const static int GALLERY_SIZE = 1;
 
 int main() {
 
-//    sigma::KernelProvider::initialize();
-//
-//    auto gallery_data = util::read_npy_data(FILE_STORE_PATH + "gallery_x.npy");
-//    gallery_data.assign(gallery_data.begin(), gallery_data.begin() + GALLERY_SIZE);
-//
-//    size_t poly_modulus_degree = 8192;
-//    double scale = pow(2.0, 40);
-//
-//    sigma::EncryptionParameters params(sigma::scheme_type::ckks);
-//    params.set_poly_modulus_degree(poly_modulus_degree);
-//    params.set_coeff_modulus(sigma::CoeffModulus::BFVDefault(poly_modulus_degree));
-////    params.setup_device_params(); // 初始化device相关参数
-//    sigma::SIGMAContext context(params);
-////    context.setup_device_params(); // 初始化device相关参数
-//    sigma::CKKSEncoder encoder(context);
-//
-//    std::cout << "GPU Encode begins" << std::endl;
-//    auto gpu_start = std::chrono::high_resolution_clock::now();
-//    for (size_t i = 0; i < gallery_data.size(); i++) {
-//        sigma::Plaintext plain_vec;
-//        encoder.encode(gallery_data[i], scale, plain_vec);
-//        std::cout << "[" << i << "]=" << plain_vec[i] << std::endl;
-//    }
-//    auto gpu_end = std::chrono::high_resolution_clock::now();
-//    auto gpu_duration = std::chrono::duration_cast<std::chrono::milliseconds>(gpu_end - gpu_start);
-//    std::cout << "GPU Encode ends " << gpu_duration.count() / 1000.f << "s" << std::endl;
+    TIMER_START;·
 
-    size_t poly_modulus_degree = ConfigUtil.int64ValueForKey("poly_modulus_degree");
-    size_t scale_power = ConfigUtil.int64ValueForKey("scale_power");
-    double scale = pow(2.0, scale_power);
-    auto slots = poly_modulus_degree / 2;
+    size_t size = 8192;
 
-    // TODO: remove @wangshuchao
-    sigma::KernelProvider::initialize();
+    vector<vector<int64_t>> database(size, vector<int64_t>(size, 0));
+    for (size_t i = 0; i < size; ++i) {
+        for (size_t j = 0; j < size; ++j) {
+//            database[i][j] = i * size + j;
+            database[i][j] = j;
+        }
+    }
 
-    sigma::EncryptionParameters parms(sigma::scheme_type::ckks);
-    parms.set_poly_modulus_degree(poly_modulus_degree);
-    auto modulus_bit_sizes = ConfigUtil.intVectorValueForKey("modulus_bit_sizes");
-    parms.set_coeff_modulus(sigma::CoeffModulus::Create(poly_modulus_degree, modulus_bit_sizes));
+    for (int i = 1; i < size; ++i) {
+        auto &arr = database[i];
+        std::rotate(arr.begin(), arr.begin() + i, arr.end());
+    }
 
-    sigma::SIGMAContext context(parms);
+    KernelProvider::initialize();
 
-    sigma::KeyGenerator keygen(context);
-    sigma::SecretKey secret_key;
-    secret_key = keygen.secret_key();
+    EncryptionParameters params(sigma::scheme_type::bfv);
+    size_t poly_modulus_degree = size;
+    params.set_poly_modulus_degree(poly_modulus_degree);
+    params.set_coeff_modulus(CoeffModulus::BFVDefault(poly_modulus_degree));
+    params.set_plain_modulus(PlainModulus::Batching(poly_modulus_degree, 20));
 
-    double data[] = {12.456134613, 13.43123413461346, 42.2456154134, 13.546723562356};
+    sigma::SIGMAContext context(params);
+    KeyGenerator keygen(context);
 
-    sigma::CKKSEncoder encoder(context);
-    sigma::Encryptor encryptor(context, secret_key);
+    sigma::PublicKey public_key;
+    keygen.create_public_key(public_key);
 
-    sigma::Ciphertext c1;
-    c1.use_half_data() = true;
-    encryptor.sample_symmetric_ckks_c1(c1);
+    sigma::SecretKey secret_key = keygen.secret_key();
 
-    sigma::Plaintext plain_vec;
-    encoder.encode(data, 4, scale, plain_vec);
-    sigma::Ciphertext ciphertext;
-    ciphertext.use_half_data() = true;
-    encryptor.encrypt_symmetric_ckks(plain_vec, ciphertext, c1);
+    GaloisKeys galois_keys;
+    keygen.create_galois_keys(galois_keys);
 
-    sigma::Plaintext plaintext;
-    double data2[] = {0.35345, 0.1324514, 0.132451, 0.1346523146};
-    encoder.encode(data2, 4, scale, plaintext);
+    Encryptor encryptor(context, public_key);
+    Evaluator evaluator(context);
+    Decryptor decryptor(context, secret_key);
 
-    sigma::Evaluator evaluator(context);
+    BatchEncoder batch_encoder(context);
 
-    evaluator.multiply_plain_inplace(c1, plaintext);
+    // Encrypting vector of zeros
+    vector<int64_t> b_values(size, 0);
+    b_values[3] = 1;
+    Plaintext zeros;
+    batch_encoder.encode(b_values, zeros);
+    Ciphertext encrypted_zeros;
+    encryptor.encrypt(zeros, encrypted_zeros);
 
-    evaluator.multiply_plain_inplace(ciphertext, plaintext);
+    vector<Plaintext> encoded_database(size);
+    for (int i = 0; i < size; ++i) {
+        batch_encoder.encode(database[i], encoded_database[i]);
+        cout << "database encode " << i << " end" << endl;
+    }
 
-    sigma::Decryptor decryptor(context, secret_key);
+    Ciphertext result;
+    evaluator.multiply_plain(encrypted_zeros, encoded_database[0], result);
+    for (int i = 1; i < size; ++i) {
+//        Ciphertext rotated_zeros;
+//        evaluator.rotate_rows(encrypted_zeros, i, galois_keys, rotated_zeros);
+//        evaluator.multiply_plain_inplace(rotated_zeros, encoded_database[i]);
+//        evaluator.add_inplace(result, rotated_zeros);
+//        cout << "calculate " << i << " end" << endl;
 
-    sigma::Plaintext result;
-    decryptor.ckks_decrypt(ciphertext, c1, result);
-    std::vector<double> dest;
-    encoder.decode(result, dest);
+        evaluator.rotate_rows_inplace(encrypted_zeros, 1, galois_keys);
+        Ciphertext ciphertext;
+        evaluator.multiply_plain(encrypted_zeros, encoded_database[i], ciphertext);
+        evaluator.add_inplace(result, encrypted_zeros);
+        cout << "calculate " << i << " end" << endl;
+    }
 
-    printf("%lf\n", dest[0]);
-    printf("%lf\n", dest[1]);
-    printf("%lf\n", dest[2]);
-    printf("%lf\n", dest[3]);
-//    std::cout << dest[0] << std::endl;
-//    std::cout << dest[1] << std::endl;
-//    std::cout << dest[2] << std::endl;
-//    std::cout << dest[3] << std::endl;
+    Plaintext plain_result;
+    decryptor.decrypt(result, plain_result);
+    std::vector<int64_t> decrypted_values;
+    batch_encoder.decode(plain_result, decrypted_values);
+    for (int i = 0; i < size; ++i) {
+        std::cout << decrypted_values[i] << " ";
+    }
+    std::cout << std::endl;
+
+    TIMER_PRINT_NOW(Calculate);
 
     return 0;
 }

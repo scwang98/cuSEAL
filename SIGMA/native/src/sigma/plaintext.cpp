@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
 
-#include "sigma/plaintext.h"
+#include "sigma/plaintext.cuh"
 #include "sigma/util/common.h"
 
 using namespace std;

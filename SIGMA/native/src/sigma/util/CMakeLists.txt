@@ -27,6 +27,7 @@ set(SIGMA_SOURCE_FILES ${SIGMA_SOURCE_FILES}
         ${CMAKE_CURRENT_LIST_DIR}/uintcore.cpp
         ${CMAKE_CURRENT_LIST_DIR}/ztools.cpp
         ${CMAKE_CURRENT_LIST_DIR}/randomgenerator.cu
+        ${CMAKE_CURRENT_LIST_DIR}/HostList.cu
 )
 
 # Add header files for installation
@@ -68,6 +69,7 @@ install(
         ${CMAKE_CURRENT_LIST_DIR}/hostarray.h
         ${CMAKE_CURRENT_LIST_DIR}/uint128_ntt.h
         ${CMAKE_CURRENT_LIST_DIR}/randomgenerator.cuh
+        ${CMAKE_CURRENT_LIST_DIR}/HostList.h
         DESTINATION
         ${SIGMA_INCLUDES_INSTALL_DIR}/sigma/util
 )

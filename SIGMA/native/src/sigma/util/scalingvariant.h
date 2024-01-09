@@ -5,7 +5,7 @@
 
 #include "sigma/context.h"
 #include "sigma/memorymanager.h"
-#include "sigma/plaintext.h"
+#include "sigma/plaintext.cuh"
 #include "sigma/util/iterator.h"
 #include <cstdint>
 

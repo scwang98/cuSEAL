@@ -7,7 +7,7 @@
 #include "sigma/context.h"
 #include "sigma/encryptionparams.h"
 #include "sigma/memorymanager.h"
-#include "sigma/plaintext.h"
+#include "sigma/plaintext.cuh"
 #include "sigma/publickey.h"
 #include "sigma/secretkey.h"
 #include "sigma/serializable.h"
@@ -282,9 +282,9 @@ namespace sigma
         }
 
         inline void encrypt_symmetric_ckks(
-                const Plaintext &plain, Ciphertext &destination, Ciphertext &c1)
+                const Plaintext &plain, Ciphertext &destination, Ciphertext &c1, cudaStream_t &stream)
         {
-            encrypt_symmetric_ckks_internal(plain, destination, c1);
+            encrypt_symmetric_ckks_internal(plain, destination, c1, stream);
         }
 
         inline void sample_symmetric_ckks_c1(Ciphertext &destination) const {
@@ -442,7 +442,7 @@ namespace sigma
 
         void sample_symmetric_ckks_c1_internal(Ciphertext &destination) const;
 
-        void encrypt_symmetric_ckks_internal(const Plaintext &plain, Ciphertext &destination, Ciphertext &c1);
+        void encrypt_symmetric_ckks_internal(const Plaintext &plain, Ciphertext &destination, Ciphertext &c1, cudaStream_t &stream);
 
         SIGMAContext context_;
 
@@ -452,6 +452,6 @@ namespace sigma
 
         util::RandomGenerator *random_generator_ = nullptr;
 
-        util::DeviceArray<uint64_t> temp_noise_;
+//        util::DeviceArray<uint64_t> temp_noise_;
     };
 } // namespace sigma

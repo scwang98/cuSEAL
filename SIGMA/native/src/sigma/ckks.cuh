@@ -4,7 +4,7 @@
 #pragma once
 
 #include "sigma/context.h"
-#include "sigma/plaintext.h"
+#include "sigma/plaintext.cuh"
 #include "sigma/util/common.h"
 #include "sigma/util/croots.h"
 #include "sigma/util/defines.h"
@@ -184,10 +184,9 @@ namespace sigma
             encode(values, context_.first_parms_id(), scale, destination, std::move(pool));
         }
 
-        inline void encode_double(
-                const double *values, size_t values_size, double scale, Plaintext &destination,
-                MemoryPoolHandle pool = MemoryManager::GetPool()) {
-            encode_internal(values, values_size, context_.first_parms_id(), scale, destination, std::move(pool));
+        inline void encode_float(
+                const float *values, size_t values_size, double scale, Plaintext &destination, cudaStream_t &stream) {
+            encode_internal(values, values_size, context_.first_parms_id(), scale, destination, stream);
         }
 #ifdef SIGMA_USE_MSGSL
         /**
@@ -448,16 +447,14 @@ namespace sigma
         }
 
         void encode_internal(
-                const double *values, size_t values_size, parms_id_type parms_id, double scale, Plaintext &destination,
-                MemoryPoolHandle pool);
-        void encode_internal(
                 const std::complex<double> *values, size_t values_size, parms_id_type parms_id, double scale, Plaintext &destination,
                 MemoryPoolHandle pool) const;
 
     private:
 
-        void encode_internal_cu(
-            const double *values, size_t values_size, parms_id_type parms_id, double scale, Plaintext &destination);
+        void encode_internal(
+                const float *values, size_t values_size, parms_id_type parms_id, double scale, Plaintext &destination,
+                cudaStream_t &stream);
 
         template <
             typename T, typename = std::enable_if_t<
@@ -602,8 +599,8 @@ namespace sigma
         util::DeviceArray<std::size_t> matrix_reps_index_map_;
         util::HostArray<std::size_t> host_matrix_reps_index_map_;
 
-        util::DeviceArray<double> temp_values_;
-        util::DeviceArray<cuDoubleComplex> temp_com_values_;
+//        util::DeviceArray<float> temp_values_;
+//        util::DeviceArray<cuDoubleComplex> temp_com_values_;
 
         ComplexArith complex_arith_;
 

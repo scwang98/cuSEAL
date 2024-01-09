@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
 
-#include "sigma/ckks.h"
+#include "sigma/ckks.cuh"
 #include "kernelutils.cuh"
 #include "cuComplex.h"
 #include <random>
@@ -66,15 +66,15 @@ namespace sigma {
         }
         inv_root_powers_ = host_inv_root_power;
 
-        temp_values_.resize(slots_);
-        temp_com_values_.resize(coeff_count);
+//        temp_values_.resize(slots_);
+//        temp_com_values_.resize(coeff_count);
 
         complex_arith_ = ComplexArith();
         fft_handler_ = FFTHandler(complex_arith_);
     }
 
     __global__ void g_set_conj_values_double(
-            const double *values,
+            const float* values,
             size_t values_size,
             size_t slots,
             cuDoubleComplex *conj_values,
@@ -153,23 +153,25 @@ namespace sigma {
             cuDoubleComplex *operand,
             size_t poly_modulus_degree_power,
             const cuDoubleComplex *roots,
-            double fix = 1
+            double fix,
+            cudaStream_t &stream
     ) {
         std::size_t n = size_t(1) << poly_modulus_degree_power;
         std::size_t m = n >> 1;
         std::size_t layer = 0;
         auto size = n >> 1;
         for (; m >= 1; m >>= 1) {
-            g_fft_transfer_from_rev_layered<<<size / 128, 128>>>(layer, operand, poly_modulus_degree_power, roots);
+            g_fft_transfer_from_rev_layered<<<size / 128, 128, 0, stream>>>(layer, operand, poly_modulus_degree_power, roots);
             layer++;
         }
         if (fix != 1) {
-            g_multiply_scalar<<<n / 128, 128>>>(operand, fix);
+            g_multiply_scalar<<<n / 128, 128, 0, stream>>>(operand, fix);
         }
     }
 
-    void CKKSEncoder::encode_internal_cu(
-            const double *values, size_t values_size, parms_id_type parms_id, double scale, Plaintext &destination) {
+    void CKKSEncoder::encode_internal(
+            const float *values, size_t values_size, parms_id_type parms_id, double scale, Plaintext &destination,
+            cudaStream_t &stream) {
 //        auto time_start0 = std::chrono::high_resolution_clock::now();
         // Verify parameters.
         auto context_data_ptr = context_.get_context_data(parms_id);
@@ -204,18 +206,21 @@ namespace sigma {
         // values_size is guaranteed to be no bigger than slots_
         std::size_t n = util::mul_safe(slots_, std::size_t(2));
 
-        KernelProvider::copy(temp_values_.get(), values, values_size);
+        destination.temp_values_.resize(slots_);
+        destination.temp_com_values_.resize(coeff_count);
 
-        g_set_conj_values_double<<<slots_ / 128, 128>>>(
-                temp_values_.get(),
+        KernelProvider::copyAsync(destination.temp_values_.get(), values, values_size, stream);
+
+        g_set_conj_values_double<<<slots_ / 128, 128, 0, stream>>>(
+                destination.temp_values_.get(),
                 values_size,
                 slots_,
-                temp_com_values_.get(),
+                destination.temp_com_values_.get(),
                 matrix_reps_index_map_.get()
         );
 
         double fix = scale / static_cast<double>(n);
-        k_fft_transfer_from_rev(temp_com_values_.get(), util::get_power_of_two(n), inv_root_powers_.get(), fix);
+        k_fft_transfer_from_rev(destination.temp_com_values_.get(), util::get_power_of_two(n), inv_root_powers_.get(), fix, stream);
 
         // Resize destination to appropriate size
         // Need to first set parms_id to zero, otherwise resize
@@ -226,8 +231,8 @@ namespace sigma {
 
         destination.device_resize(dest_size);
 
-        g_coeff_modulus_reduce_64<<<n / 128, 128>>>(
-                temp_com_values_.get(),
+        g_coeff_modulus_reduce_64<<<n / 128, 128, 0, stream>>>(
+                destination.temp_com_values_.get(),
                 n,
                 coeff_modulus_size,
                 coeff_modulus.get(),
@@ -236,8 +241,7 @@ namespace sigma {
 
         // Transform to NTT domain
         for (std::size_t i = 0; i < coeff_modulus_size; i++) {
-            kernel_util::g_ntt_negacyclic_harvey(destination.device_data() + i * coeff_count, coeff_count,
-                                                 ntt_tables[i]);
+            kernel_util::g_ntt_negacyclic_harvey(destination.device_data() + i * coeff_count, coeff_count, ntt_tables[i], stream);
         }
 
         destination.parms_id() = parms_id;
@@ -408,11 +412,6 @@ namespace sigma {
 
         destination.parms_id() = parms_id;
         destination.scale() = 1.0;
-    }
-
-    void CKKSEncoder::encode_internal(const double *values, size_t values_size, parms_id_type parms_id, double scale,
-                                      Plaintext &destination, MemoryPoolHandle pool) {
-        encode_internal_cu(values, values_size, parms_id, scale, destination);
     }
 
     void CKKSEncoder::encode_internal(const std::complex<double> *values, size_t values_size, parms_id_type parms_id,

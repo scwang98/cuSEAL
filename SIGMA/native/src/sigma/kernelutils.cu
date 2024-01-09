@@ -4,7 +4,6 @@
 
 namespace sigma::kernel_util {
 
-    template<uint step>
     __global__ void g_dyadic_product_coeffmod(
             const uint64_t *operand1,
             const uint64_t *operand2,
@@ -15,32 +14,28 @@ namespace sigma::kernel_util {
 
         auto tid = blockDim.x * blockIdx.x + threadIdx.x;
 
-        auto index = tid * step;
+        // Reduces z using base 2^64 Barrett reduction
+        uint64_t z[2], tmp1, tmp2[2], tmp3, carry;
+        d_multiply_uint64(*(operand1 + tid), *(operand2 + tid), z);
 
-        for (uint i = 0; i < step; ++i) {
-            // Reduces z using base 2^64 Barrett reduction
-            uint64_t z[2], tmp1, tmp2[2], tmp3, carry;
-            d_multiply_uint64(*(operand1 + index + i), *(operand2 + index + i), z);
+        // Multiply input and const_ratio
+        // Round 1
+        d_multiply_uint64_hw64(z[0], const_ratio_0, &carry);
+        d_multiply_uint64(z[0], const_ratio_1, tmp2);
+        tmp3 = tmp2[1] + d_add_uint64(tmp2[0], carry, &tmp1);
 
-            // Multiply input and const_ratio
-            // Round 1
-            d_multiply_uint64_hw64(z[0], const_ratio_0, &carry);
-            d_multiply_uint64(z[0], const_ratio_1, tmp2);
-            tmp3 = tmp2[1] + d_add_uint64(tmp2[0], carry, &tmp1);
+        // Round 2
+        d_multiply_uint64(z[1], const_ratio_0, tmp2);
+        carry = tmp2[1] + d_add_uint64(tmp1, tmp2[0], &tmp1);
 
-            // Round 2
-            d_multiply_uint64(z[1], const_ratio_0, tmp2);
-            carry = tmp2[1] + d_add_uint64(tmp1, tmp2[0], &tmp1);
+        // This is all we care about
+        tmp1 = z[1] * const_ratio_1 + tmp3 + carry;
 
-            // This is all we care about
-            tmp1 = z[1] * const_ratio_1 + tmp3 + carry;
+        // Barrett subtraction
+        tmp3 = z[0] - tmp1 * modulus_value;
 
-            // Barrett subtraction
-            tmp3 = z[0] - tmp1 * modulus_value;
-
-            // Claim: One more subtraction is enough
-            *(result + index + i) = tmp3 >= modulus_value ? tmp3 - modulus_value : tmp3;
-        }
+        // Claim: One more subtraction is enough
+        *(result + tid) = tmp3 >= modulus_value ? tmp3 - modulus_value : tmp3;
 
     }
 
@@ -48,43 +43,34 @@ namespace sigma::kernel_util {
             uint64_t *operand1, const uint64_t *operand2,
             size_t coeff_count, size_t ntt_size, size_t coeff_modulus_size, const Modulus &modulus) {
 
-        // 过于耗时
-        auto operand1_device = KernelProvider::malloc<uint64_t>(coeff_count);
-        auto operand2_device = KernelProvider::malloc<uint64_t>(coeff_count);
-        KernelProvider::copy(operand1_device, operand1, coeff_count);
-        KernelProvider::copy(operand2_device, operand2, coeff_count);
-
         const uint64_t modulus_value = modulus.value();
         const uint64_t const_ratio_0 = modulus.const_ratio()[0];
         const uint64_t const_ratio_1 = modulus.const_ratio()[1];
 
-        uint step = 2;
-        uint threadDim = 1024;
-        uint blockDim = coeff_count * ntt_size * coeff_modulus_size / threadDim / step;
+        uint blockDim = coeff_count * ntt_size * coeff_modulus_size / 128;
 
-        g_dyadic_product_coeffmod<2><<<blockDim, threadDim>>>(
-                operand1_device,
-                operand2_device,
+        g_dyadic_product_coeffmod<<<blockDim, 128>>>(
+                operand1,
+                operand2,
                 modulus_value,
                 const_ratio_0,
                 const_ratio_1,
-                operand1_device);
+                operand1);
 
-        KernelProvider::retrieve(operand1, operand1_device, coeff_count);
     }
 
     void dyadic_product_coeffmod(
             const uint64_t *operand1, const uint64_t *operand2, size_t coeff_count, size_t ntt_size,
-            size_t coeff_modulus_size, const Modulus &modulus, uint64_t *result) {
+            size_t coeff_modulus_size, const Modulus &modulus, uint64_t *result, cudaStream_t &stream) {
 
         const uint64_t modulus_value = modulus.value();
         const uint64_t const_ratio_0 = modulus.const_ratio()[0];
         const uint64_t const_ratio_1 = modulus.const_ratio()[1];
 
-        uint threadDim = 1024;
-        uint blockDim = coeff_count * ntt_size * coeff_modulus_size / threadDim / 2;
+        uint threadDim = 128;
+        uint blockDim = coeff_count * ntt_size * coeff_modulus_size / threadDim;
 
-        g_dyadic_product_coeffmod<2><<<blockDim, threadDim>>>(
+        g_dyadic_product_coeffmod<<<blockDim, threadDim, 0, stream>>>(
                 operand1,
                 operand2,
                 modulus_value,
@@ -211,6 +197,40 @@ namespace sigma::kernel_util {
         CHECK(cudaGetLastError());
     }
 
+    void g_ntt_negacyclic_harvey(uint64_t *operand, size_t coeff_count, const util::NTTTables &tables, cudaStream_t &stream) {
+        switch (coeff_count) {
+            case 32768: {
+                ct_ntt_inner<1, 32768><<<32768 / 1024 / 2, 1024, 0, stream>>>(operand, tables);
+                ct_ntt_inner<2, 32768><<<32768 / 1024 / 2, 1024, 0, stream>>>(operand, tables);
+                ct_ntt_inner<4, 32768><<<32768 / 1024 / 2, 1024, 0, stream>>>(operand, tables);
+                ct_ntt_inner_single<8, 32768><<<8, 1024, 4096 * sizeof(uint64_t), stream>>>(operand, tables);
+                break;
+            }
+            case 16384: {
+                ct_ntt_inner<1, 16384><<<16384 / 1024 / 2, 1024, 0, stream>>>(operand, tables);
+                ct_ntt_inner<2, 16384><<<16384 / 1024 / 2, 1024, 0, stream>>>(operand, tables);
+                ct_ntt_inner_single<4, 16384><<<4, 1024, 4096 * sizeof(uint64_t), stream>>>(operand, tables);
+                break;
+            }
+            case 8192: {
+                ct_ntt_inner<1, 8192><<<8192 / 1024 / 2, 1024, 0, stream>>>(operand, tables);
+                ct_ntt_inner_single<2, 8192><<<2, 1024, 4096 * sizeof(uint64_t), stream>>>(operand, tables);
+                break;
+            }
+            case 4096: {
+                ct_ntt_inner_single<1, 4096> <<<1, 1024, 4096 * sizeof(uint64_t), stream>>>(operand, tables);
+                break;
+            }
+            case 2048: {
+                ct_ntt_inner_single<1, 2048> <<<1, 1024, 2048 * sizeof(uint64_t), stream>>>(operand, tables);
+                break;
+            }
+            default:
+                throw std::invalid_argument("not support");
+        }
+        CHECK(cudaGetLastError());
+    }
+
     __device__ inline constexpr int d_hamming_weight(unsigned char value) {
         int t = static_cast<int>(value);
         t -= (t >> 1) & 0x55;
@@ -235,11 +255,13 @@ namespace sigma::kernel_util {
         }
     }
 
-    void sample_poly_cbd(util::RandomGenerator *random_generator, const Modulus *coeff_modulus, size_t coeff_modulus_size, size_t coeff_count, uint64_t *destination) {
+    void sample_poly_cbd(
+            util::RandomGenerator *random_generator, const Modulus *coeff_modulus, size_t coeff_modulus_size,
+            size_t coeff_count, uint64_t *destination, cudaStream_t &stream) {
 
-        random_generator->generate(destination, coeff_count);
+        random_generator->generate(destination, coeff_count, stream);
 
-        g_sample_poly_cbd<<<coeff_count / 1024, 1024>>>(coeff_modulus, coeff_modulus_size, coeff_count, destination);
+        g_sample_poly_cbd<<<coeff_count / 1024, 1024, 0, stream>>>(coeff_modulus, coeff_modulus_size, coeff_count, destination);
 
     }
 
@@ -259,10 +281,26 @@ namespace sigma::kernel_util {
 
     void add_negate_add_poly_coeffmod(
             const uint64_t *operand1, const uint64_t *operand2, const uint64_t *operand3, std::size_t coeff_count, uint64_t modulus_value,
-            uint64_t *result) {
+            uint64_t *result, cudaStream_t &stream) {
 
-        g_add_negate_poly_coeffmod<<<coeff_count / 1024, 1024>>>(operand1, operand2, operand3, modulus_value, result);
+        g_add_negate_poly_coeffmod<<<coeff_count / 1024, 1024, 0, stream>>>(operand1, operand2, operand3, modulus_value, result);
 
+    }
+
+    __global__
+    void g_add_poly_coeffmod(
+            const uint64_t *operand1, const uint64_t *operand2, const uint64_t modulus_value, uint64_t *result) {
+        auto tid = blockDim.x * blockIdx.x + threadIdx.x;
+
+        auto sum = operand1[tid] + operand2[tid];
+        result[tid] = SIGMA_COND_SELECT(sum >= modulus_value, sum - modulus_value, sum);
+    }
+
+    void add_poly_coeffmod(
+            const uint64_t *operand1, const uint64_t *operand2, size_t size, size_t coeff_modulus_size,
+            std::size_t coeff_count, uint64_t modulus_value, uint64_t *result) {
+        auto total_size = size * coeff_modulus_size * coeff_count;
+        g_add_poly_coeffmod<<<total_size / 128, 128>>>(operand1, operand2, modulus_value, result);
     }
 
 }

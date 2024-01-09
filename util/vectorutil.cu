@@ -4,12 +4,13 @@
 
 #include "vectorutil.h"
 #include "../extern/cnpy/cnpy.h"
-
+#include "sigma/util/HostList.h"
 #include <cmath>
+#include <vector>
 
 namespace util {
 
-    double calculateMagnitude(const std::vector<double> &vector) {
+    double calculateMagnitude(const std::vector<float> &vector) {
         double sum = 0.0;
         for (double value: vector) {
             sum += value * value;
@@ -17,28 +18,28 @@ namespace util {
         return std::sqrt(sum);
     }
 
-    void normalizeVector(std::vector<double> &vector) {
-        double magnitude = calculateMagnitude(vector);
+    void normalizeVector(std::vector<float> &vector) {
+        float magnitude = calculateMagnitude(vector);
         if (magnitude > 0.0) {
-            for (double &value: vector) {
+            for (float &value: vector) {
                 value /= magnitude;
             }
         }
     }
 
-    std::vector<std::vector<double>> read_npy_data(const std::string &npy_name) {
+    std::vector<std::vector<float>> read_npy_data(const std::string &npy_name) {
         cnpy::NpyArray arr = cnpy::npy_load(npy_name);
         std::vector<size_t> shape = arr.shape;
         size_t numRows = shape[0];
         size_t numCols = shape[1];
         auto *data = arr.data<float>();
-        std::vector<std::vector<double>> matrix;
+        std::vector<std::vector<float>> matrix;
         matrix.reserve(numRows);
         for (size_t i = 0; i < numRows; ++i) {
-            std::vector<double> row;
+            std::vector<float> row;
             row.reserve(numCols);
             for (size_t j = 0; j < numCols; ++j) {
-                auto value = (double) data[i * numCols + j];
+                auto value = data[i * numCols + j];
                 row.push_back(value);
             }
             normalizeVector(row);
@@ -98,4 +99,59 @@ namespace util {
 
         return matrix;
     }
+
+    FILE *read_npy_header(const std::string &npy_name, size_t slots, double scale, size_t &size) {
+        FILE *fp = fopen(npy_name.c_str(), "rb");
+        std::vector<size_t> shape;
+        size_t word_size;
+        bool fortran_order;
+        cnpy::parse_npy_header(fp, word_size, shape, fortran_order);
+
+        cnpy::NpyArray arr(shape, word_size, fortran_order);
+        size_t nread = fread(arr.data<char>(), 1, arr.num_bytes(), fp);
+        if (nread != arr.num_bytes())
+            throw std::runtime_error("load_the_npy_file: failed fread");
+
+        return fp;
+    }
+
+    NPYReader::NPYReader(const std::string &npy_name, size_t slots) {
+        fp_ = fopen(npy_name.c_str(), "rb");
+        std::vector<size_t> shape;
+        bool fortran_order;
+        cnpy::parse_npy_header(fp_, word_size_, shape, fortran_order);
+        size_t single_size = 512;
+        auto batch_size = slots / 512;
+        row_ = shape[0] / batch_size;
+        col_ = slots;
+
+        temp_ = new float[slots * 512];
+    }
+
+    sigma::util::HostGroup<float> *NPYReader::read_data(float scale) {
+        size_t read_size = col_ * 4 * 512;
+        size_t n_read = fread(temp_, 1, read_size, fp_);
+        if (read_size != n_read) {
+            return nullptr;
+        }
+        float *data = nullptr;
+        cudaMallocHost((void **)&data, col_ * 512 * sizeof(float));
+
+        auto data_start = data;
+        auto temp_start = temp_;
+        for (size_t i = 0; i < 512; i++) {
+            auto line_ptr = data_start + (i * col_);
+            auto data_ptr = temp_start + i;
+            for (size_t j = 0; j < col_; j++) {
+                *(line_ptr + j) = *(data_ptr + j * 512) * scale;
+            }
+        }
+
+        return new sigma::util::HostGroup<float>(data, 512, col_);
+    }
+
+    NPYReader::~NPYReader() {
+        delete[] temp_;
+    }
+
 } // util

@@ -9,7 +9,7 @@
 #include "sigma/c/utilities.h"
 
 // SIGMA
-#include "sigma/ckks.h"
+#include "sigma/ckks.cuh"
 
 using namespace std;
 using namespace sigma;

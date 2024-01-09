@@ -13,6 +13,7 @@
 #include "sigma/util/defines.h"
 #include "sigma/util/polycore.h"
 #include "sigma/util/devicearray.cuh"
+#include "cuComplex.h"
 #include <algorithm>
 #include <functional>
 #include <stdexcept>
@@ -815,6 +816,9 @@ namespace sigma
         Enables access to private members of sigma::Plaintext for SIGMA_C.
         */
         struct PlaintextPrivateHelper;
+
+        util::DeviceArray<float> temp_values_;
+        util::DeviceArray<cuDoubleComplex> temp_com_values_;
 
     private:
         void save_members(std::ostream &stream) const;

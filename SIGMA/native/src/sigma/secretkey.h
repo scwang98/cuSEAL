@@ -4,7 +4,7 @@
 #pragma once
 
 #include "sigma/memorymanager.h"
-#include "sigma/plaintext.h"
+#include "sigma/plaintext.cuh"
 #include "sigma/randomgen.h"
 #include "sigma/valcheck.h"
 #include "sigma/util/common.h"

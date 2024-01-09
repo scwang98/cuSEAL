@@ -138,6 +138,20 @@ namespace sigma
         */
         Ciphertext(const Ciphertext &copy) = default;
 
+        Ciphertext(const Ciphertext &copy, bool copy_device) : parms_id_(copy.parms_id_),
+                                                               is_ntt_form_(copy.is_ntt_form_),
+                                                               size_(copy.size_),
+                                                               poly_modulus_degree_(copy.poly_modulus_degree_),
+                                                               coeff_modulus_size_(copy.coeff_modulus_size_),
+                                                               scale_(copy.scale_),
+                                                               correction_factor_(copy.correction_factor_),
+                                                               data_(copy.data_),
+                                                               use_half_data_(copy.use_half_data_) {
+            if (copy_device) {
+                device_data_.copy_device_data(copy.device_data_.get(), copy.device_data_.size());
+            }
+        }
+
         /**
         Creates a new ciphertext by moving a given one.
 
@@ -331,6 +345,11 @@ namespace sigma
         SIGMA_NODISCARD inline const ct_coeff_type *data() const noexcept
         {
             return data_.cbegin();
+        }
+
+        SIGMA_NODISCARD inline const ct_coeff_type *device_data() const noexcept
+        {
+            return device_data_.get();
         }
 
         /**
@@ -720,14 +739,46 @@ namespace sigma
             KernelProvider::retrieve(data_.begin(), device_data_.get(), data_.size());
         }
 
+        inline void retrieve_to_host(cudaStream_t &stream) {
+            KernelProvider::retrieveAsync(data_.begin(), device_data_.get(), data_.size(), stream);
+        }
+
         inline void release_device_data() {
             device_data_.release();
+        }
+
+        inline void copy_on_device(const Ciphertext &copy) {
+            parms_id_ = copy.parms_id_;
+            is_ntt_form_ = copy.is_ntt_form_;
+            size_ = copy.size_;
+            poly_modulus_degree_ = copy.poly_modulus_degree_;
+            coeff_modulus_size_ = copy.coeff_modulus_size_;
+            scale_ = copy.scale_;
+            correction_factor_ = copy.correction_factor_;
+            data_ = copy.data_;
+            use_half_data_ = copy.use_half_data_;
+            device_data_.copy_device_data(copy.device_data_.get(), copy.device_data_.size());
+        }
+
+        inline void copy_device_from_host(const Ciphertext &copy) {
+            parms_id_ = copy.parms_id_;
+            is_ntt_form_ = copy.is_ntt_form_;
+            size_ = copy.size_;
+            poly_modulus_degree_ = copy.poly_modulus_degree_;
+            coeff_modulus_size_ = copy.coeff_modulus_size_;
+            scale_ = copy.scale_;
+            correction_factor_ = copy.correction_factor_;
+            data_ = copy.data_;
+            use_half_data_ = copy.use_half_data_;
+            device_data_.set_host_data(copy.data_.begin(), copy.data_.size());
         }
 
         /**
         Enables access to private members of sigma::Ciphertext for SIGMA_C.
         */
         struct CiphertextPrivateHelper;
+
+        util::DeviceArray<uint64_t> temp_noise_;
 
     private:
         void reserve_internal(

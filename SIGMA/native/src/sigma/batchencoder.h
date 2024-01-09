@@ -4,7 +4,7 @@
 #pragma once
 
 #include "sigma/context.h"
-#include "sigma/plaintext.h"
+#include "sigma/plaintext.cuh"
 #include "sigma/util/defines.h"
 #include <vector>
 #ifdef SIGMA_USE_MSGSL

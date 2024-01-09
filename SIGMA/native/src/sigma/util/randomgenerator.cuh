@@ -3,7 +3,7 @@
 #include "cuda_runtime.h"
 #include "curand_kernel.h"
 #include <cstdint>
-#include "../kernelprovider.h"
+#include "../kernelprovider.cuh"
 
 
 namespace sigma::util {
@@ -17,13 +17,13 @@ namespace sigma::util {
 
     public:
 
-        void generate(uint64_t *destination, size_t size);
+        void prepare_states(size_t size);
+
+        void generate(uint64_t *destination, size_t size, cudaStream_t &stream);
 
     private:
         curandStateXORWOW_t *states_ = nullptr;
         size_t size_ = 0;
-
-        void prepare_states(size_t size);
 
     };
 }

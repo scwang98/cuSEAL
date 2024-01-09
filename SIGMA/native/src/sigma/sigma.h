@@ -5,7 +5,7 @@
 
 #include "sigma/batchencoder.h"
 #include "sigma/ciphertext.h"
-#include "sigma/ckks.h"
+#include "sigma/ckks.cuh"
 #include "sigma/context.h"
 #include "sigma/decryptor.h"
 #include "sigma/dynarray.h"
@@ -16,7 +16,7 @@
 #include "sigma/keygenerator.h"
 #include "sigma/memorymanager.h"
 #include "sigma/modulus.h"
-#include "sigma/plaintext.h"
+#include "sigma/plaintext.cuh"
 #include "sigma/publickey.h"
 #include "sigma/randomgen.h"
 #include "sigma/randomtostd.h"

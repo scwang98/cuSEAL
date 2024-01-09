@@ -8,7 +8,7 @@
 #include "sigma/galoiskeys.h"
 #include "sigma/memorymanager.h"
 #include "sigma/modulus.h"
-#include "sigma/plaintext.h"
+#include "sigma/plaintext.cuh"
 #include "sigma/relinkeys.h"
 #include "sigma/secretkey.h"
 #include "sigma/valcheck.h"
@@ -116,7 +116,7 @@ namespace sigma
         @throws std::logic_error if result ciphertext is transparent
         */
         void add_inplace(Ciphertext &encrypted1, const Ciphertext &encrypted2) const;
-
+        void my_add_inplace(Ciphertext &encrypted1, const Ciphertext &encrypted2) const;
         /**
         Adds two ciphertexts. This function adds together encrypted1 and encrypted2 and stores the result in the
         destination parameter.
@@ -827,6 +827,9 @@ namespace sigma
         void multiply_plain_inplace(
             Ciphertext &encrypted, const Plaintext &plain, MemoryPoolHandle pool = MemoryManager::GetPool()) const;
 
+        void my_multiply_plain_inplace(
+                Ciphertext &encrypted, const Plaintext &plain, MemoryPoolHandle pool = MemoryManager::GetPool()) const;
+
         /**
         Multiplies a ciphertext with a plaintext. This function multiplies a ciphertext with a plaintext and stores the
         result in the destination parameter. The plaintext cannot be identically 0. Dynamic memory allocations in the
@@ -1362,6 +1365,8 @@ namespace sigma
         void multiply_plain_normal(Ciphertext &encrypted, const Plaintext &plain, MemoryPoolHandle pool) const;
 
         void multiply_plain_ntt(Ciphertext &encrypted_ntt, const Plaintext &plain_ntt) const;
+
+        void my_multiply_plain_ntt(Ciphertext &encrypted_ntt, const Plaintext &plain_ntt) const;
 
         SIGMAContext context_;
     };

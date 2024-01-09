@@ -10,7 +10,7 @@
 #include "sigma/c/utilities.h"
 
 // SIGMA
-#include "sigma/plaintext.h"
+#include "sigma/plaintext.cuh"
 #include "sigma/util/common.h"
 
 using namespace std;
