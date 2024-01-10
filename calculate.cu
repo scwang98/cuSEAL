@@ -69,7 +69,7 @@ int main() {
 
     auto probe_data = util::read_npy_data(FILE_STORE_PATH + "probe_x.npy");
     // TODO: remove @wangshuchao
-    probe_data.assign(probe_data.begin(), probe_data.begin() + 100);
+    probe_data.assign(probe_data.begin(), probe_data.begin() + 2000);
 
     sigma::CKKSEncoder encoder(context);
     sigma::Evaluator evaluator(context);
@@ -82,36 +82,26 @@ int main() {
 
     c1.copy_to_device();
 
-    auto c1_sum = c1;
-    auto c1_row = c1;
+    sigma::Ciphertext c1_sum;
+    sigma::Ciphertext c1_row;
     sigma::Ciphertext result;
     sigma::Ciphertext row;
 
     std::vector<sigma::Plaintext> encoded_probes(dimension);
     for (size_t pi = 0; pi < probe_data.size(); ++pi) {
         const auto& probe = probe_data[pi];
-//        std::vector<sigma::Plaintext> encoded_probes(dimension);
         // 0.012
-        encoder.encode(probe[0], scale, encoded_probes[0]);
-        // 0.035
-        encoded_probes[0].copy_to_device();
-        // 0.029
-        c1_sum.copy_on_device(c1);
-        // 0.011
-        evaluator.my_multiply_plain_inplace(c1_sum, encoded_probes[0]);
+        encoder.cu_encode(probe[0], scale, encoded_probes[0]);
+
+        evaluator.cu_multiply_plain(c1, encoded_probes[0], c1_sum);
         for (int i = 1; i < dimension; ++i) {
 
             // 0.008
-            encoder.encode(probe[i], scale, encoded_probes[i]);
-            // 0.029
-            encoded_probes[i].copy_to_device();
+            encoder.cu_encode(probe[i], scale, encoded_probes[i]);
 
-            // 0.019
-            c1_row.copy_on_device(c1);
-            // 0.008
-            evaluator.my_multiply_plain_inplace(c1_row, encoded_probes[i]);
+            evaluator.cu_multiply_plain(c1, encoded_probes[i], c1_row);
             // 0.006
-            evaluator.my_add_inplace(c1_sum, c1_row);
+            evaluator.cu_add_inplace(c1_sum, c1_row);
         }
         // 0.07
         c1_sum.save(c1_ofs);
@@ -120,35 +110,27 @@ int main() {
         size_t calculate_size = gallery_data.size() / 512 * 512;
         std::vector<sigma::Ciphertext> results;
         for (size_t offset = 0; offset < calculate_size; offset += dimension) {
-            // TODO: gallery_data中的数据一次复制完成
             if (pi == 0) {
                 gallery_data[offset].copy_to_device();
             }
-            // 0.022
-            result.copy_on_device(gallery_data[offset]);
-            // 0.008
-            evaluator.my_multiply_plain_inplace(result, encoded_probes[0]);
+            evaluator.cu_multiply_plain(gallery_data[offset], encoded_probes[0], result);
             for (size_t i = 1; i < dimension; i++) {
                 if (pi == 0) {
                     gallery_data[offset + i].copy_to_device();
                 }
-                // 0.022
-                row.copy_on_device(gallery_data[offset + i]);
+                evaluator.cu_multiply_plain(gallery_data[offset + i], encoded_probes[i], row);
 
                 // 0.007
-                evaluator.my_multiply_plain_inplace(row, encoded_probes[i]);
-
-                // 0.007
-                evaluator.my_add_inplace(result, row);
+                evaluator.cu_add_inplace(result, row);
 
 //                std::cout << "offset=" << offset << " " << "i=" << i << std::endl;
             }
             // 0.041
             result.retrieve_to_host();
-            CUDA_TIME_START
+//            CUDA_TIME_START
             // 0.065
             result.save(ofs);
-            CUDA_TIME_STOP
+//            CUDA_TIME_STOP
         }
         ofs.close();
 //        std::cout << "calculate end " << pi << std::endl;  // TODO: remove @wangshuchao

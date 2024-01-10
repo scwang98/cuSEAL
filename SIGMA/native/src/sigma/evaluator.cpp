@@ -241,23 +241,23 @@ namespace sigma
 #endif
     }
 
-    void Evaluator::my_add_inplace(Ciphertext &encrypted1, const Ciphertext &encrypted2) const {
+    void Evaluator::cu_add_inplace(Ciphertext &encrypted1, const Ciphertext &encrypted2) const {
         // Verify parameters.
-        if (!is_metadata_valid_for(encrypted1, context_) || !is_buffer_valid(encrypted1)) {
-            throw invalid_argument("encrypted1 is not valid for encryption parameters");
-        }
-        if (!is_metadata_valid_for(encrypted2, context_) || !is_buffer_valid(encrypted2)) {
-            throw invalid_argument("encrypted2 is not valid for encryption parameters");
-        }
-        if (encrypted1.parms_id() != encrypted2.parms_id()) {
-            throw invalid_argument("encrypted1 and encrypted2 parameter mismatch");
-        }
-        if (encrypted1.is_ntt_form() != encrypted2.is_ntt_form()) {
-            throw invalid_argument("NTT form mismatch");
-        }
-        if (!are_same_scale(encrypted1, encrypted2)) {
-            throw invalid_argument("scale mismatch");
-        }
+//        if (!is_metadata_valid_for(encrypted1, context_) || !is_buffer_valid(encrypted1)) {
+//            throw invalid_argument("encrypted1 is not valid for encryption parameters");
+//        }
+//        if (!is_metadata_valid_for(encrypted2, context_) || !is_buffer_valid(encrypted2)) {
+//            throw invalid_argument("encrypted2 is not valid for encryption parameters");
+//        }
+//        if (encrypted1.parms_id() != encrypted2.parms_id()) {
+//            throw invalid_argument("encrypted1 and encrypted2 parameter mismatch");
+//        }
+//        if (encrypted1.is_ntt_form() != encrypted2.is_ntt_form()) {
+//            throw invalid_argument("NTT form mismatch");
+//        }
+//        if (!are_same_scale(encrypted1, encrypted2)) {
+//            throw invalid_argument("scale mismatch");
+//        }
 
         // Extract encryption parameters.
         auto &context_data = *context_.get_context_data(encrypted1.parms_id());
@@ -2038,7 +2038,8 @@ namespace sigma
 #endif
     }
 
-    void Evaluator::my_multiply_plain_ntt(Ciphertext &encrypted_ntt, const Plaintext &plain_ntt) const {
+    void Evaluator::cu_multiply_plain_ntt(
+            const Ciphertext &encrypted_ntt, const Plaintext &plain_ntt, Ciphertext &destination) const {
 
         auto &context_data = *context_.get_context_data(encrypted_ntt.parms_id());
         auto &parms = context_data.parms();
@@ -2048,16 +2049,22 @@ namespace sigma
         size_t encrypted_ntt_size = encrypted_ntt.size();
 
         // TODO: support multi modulus coeff_modulus
-        kernel_util::dyadic_product_coeffmod_inplace(
-                encrypted_ntt.device_data(), plain_ntt.device_data(),
-                coeff_count, encrypted_ntt_size, coeff_modulus_size, coeff_modulus[0]);
+        kernel_util::dyadic_product_coeffmod(
+                encrypted_ntt.device_data(), plain_ntt.device_data(), coeff_count, encrypted_ntt_size,
+                coeff_modulus_size, coeff_modulus[0], destination.device_data());
 
         // Set the scale
-        encrypted_ntt.scale() *= plain_ntt.scale();
+        destination.scale() *= plain_ntt.scale();
     }
 
-    void Evaluator::my_multiply_plain_inplace(Ciphertext &encrypted, const Plaintext &plain, MemoryPoolHandle pool) const {
-        my_multiply_plain_ntt(encrypted, plain);
+    void Evaluator::cu_multiply_plain_inplace(Ciphertext &encrypted, const Plaintext &plain) const {
+        cu_multiply_plain_ntt(encrypted, plain, encrypted);
+    }
+
+    void Evaluator::cu_multiply_plain(const Ciphertext &encrypted, const Plaintext &plain, Ciphertext &destination) const {
+        destination.copy_attributes(encrypted);
+        destination.alloc_device_data(encrypted);
+        cu_multiply_plain_ntt(encrypted, plain, destination);
     }
 
     void Evaluator::multiply_plain_normal(Ciphertext &encrypted, const Plaintext &plain, MemoryPoolHandle pool) const

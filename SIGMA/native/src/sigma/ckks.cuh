@@ -305,6 +305,11 @@ namespace sigma
             encode(value, context_.first_parms_id(), scale, destination, std::move(pool));
         }
 
+        inline void cu_encode(double value, double scale, Plaintext &destination,
+                              MemoryPoolHandle pool = MemoryManager::GetPool()) const {
+            cu_encode_internal(value, context_.first_parms_id(), scale, destination, std::move(pool));
+        }
+
         /**
         Encodes a double-precision complex number into a plaintext polynomial.
         Append zeros to fill all slots. Dynamic memory allocations in the process
@@ -581,6 +586,8 @@ namespace sigma
         }
 
         void encode_internal(std::int64_t value, parms_id_type parms_id, Plaintext &destination) const;
+
+        void cu_encode_internal(double value, parms_id_type parms_id, double scale, Plaintext &destination, MemoryPoolHandle pool) const;
 
         MemoryPoolHandle pool_ = MemoryManager::GetPool();
 

@@ -101,9 +101,9 @@ namespace sigma {
 
         void g_ntt_negacyclic_harvey(uint64_t *operand, size_t coeff_count, const util::NTTTables &tables, cudaStream_t &cudaStream);
 
-        void dyadic_product_coeffmod_inplace(
-                uint64_t *operand1, const uint64_t *operand2,
-                size_t coeff_count, size_t ntt_size, size_t coeff_modulus_size, const Modulus &modulus);
+        void dyadic_product_coeffmod(
+                const uint64_t *operand1, const uint64_t *operand2, size_t coeff_count, size_t ntt_size,
+                size_t coeff_modulus_size, const Modulus &modulus, uint64_t *result);
 
         void dyadic_product_coeffmod(
                 const uint64_t *operand1, const uint64_t *operand2, size_t coeff_count,size_t ntt_size,

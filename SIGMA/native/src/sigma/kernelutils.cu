@@ -39,10 +39,14 @@ namespace sigma::kernel_util {
 
     }
 
-    void dyadic_product_coeffmod_inplace(
-            uint64_t *operand1, const uint64_t *operand2,
-            size_t coeff_count, size_t ntt_size, size_t coeff_modulus_size, const Modulus &modulus) {
-
+    void dyadic_product_coeffmod(
+            const uint64_t *operand1, const uint64_t *operand2, size_t coeff_count, size_t ntt_size,
+            size_t coeff_modulus_size, const Modulus &modulus, uint64_t *result) {
+#ifdef SIGMA_DEBUG
+        if (operand1 == nullptr || operand2 == nullptr || result == nullptr) {
+            throw std::invalid_argument("nullptr");
+        }
+#endif
         const uint64_t modulus_value = modulus.value();
         const uint64_t const_ratio_0 = modulus.const_ratio()[0];
         const uint64_t const_ratio_1 = modulus.const_ratio()[1];
@@ -55,7 +59,7 @@ namespace sigma::kernel_util {
                 modulus_value,
                 const_ratio_0,
                 const_ratio_1,
-                operand1);
+                result);
 
     }
 

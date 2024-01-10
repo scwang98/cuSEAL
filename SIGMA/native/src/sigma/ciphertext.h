@@ -731,6 +731,10 @@ namespace sigma
             device_data_.resize(data_.size());
         }
 
+        inline void alloc_device_data(const Ciphertext &copy) {
+            device_data_.resize(copy.data_.size());
+        }
+
         inline void copy_to_device() {
             device_data_.set_host_data(data_.begin(), data_.size());
         }
@@ -747,7 +751,7 @@ namespace sigma
             device_data_.release();
         }
 
-        inline void copy_on_device(const Ciphertext &copy) {
+        inline void copy_attributes(const Ciphertext &copy) {
             parms_id_ = copy.parms_id_;
             is_ntt_form_ = copy.is_ntt_form_;
             size_ = copy.size_;
@@ -755,9 +759,7 @@ namespace sigma
             coeff_modulus_size_ = copy.coeff_modulus_size_;
             scale_ = copy.scale_;
             correction_factor_ = copy.correction_factor_;
-            data_ = copy.data_;
             use_half_data_ = copy.use_half_data_;
-            device_data_.copy_device_data(copy.device_data_.get(), copy.device_data_.size());
         }
 
         inline void copy_device_from_host(const Ciphertext &copy) {
