@@ -28,7 +28,7 @@ namespace sigma
         correction_factor_ = assign.correction_factor_;
 
         // Then resize
-        resize_internal(assign.size_, assign.poly_modulus_degree_, assign.coeff_modulus_size_);
+        resize_internal(assign.size_, assign.poly_modulus_degree_, assign.coeff_modulus_size_, assign.data_type_);
 
         // Size is guaranteed to be OK now so copy over
         copy(assign.data_.cbegin(), assign.data_.cend(), data_.begin());
@@ -77,7 +77,7 @@ namespace sigma
         coeff_modulus_size_ = coeff_modulus_size;
     }
 
-    void Ciphertext::resize(const SIGMAContext &context, parms_id_type parms_id, size_t size)
+    void Ciphertext::resize(const SIGMAContext &context, parms_id_type parms_id, size_t size, util::MemoryType type)
     {
         // Verify parameters
         if (!context.parameters_set())
@@ -95,10 +95,10 @@ namespace sigma
         auto &parms = context_data_ptr->parms();
         parms_id_ = context_data_ptr->parms_id();
 
-        resize_internal(size, parms.poly_modulus_degree(), parms.coeff_modulus().size());
+        resize_internal(size, parms.poly_modulus_degree(), parms.coeff_modulus().size(), type);
     }
 
-    void Ciphertext::resize_internal(size_t size, size_t poly_modulus_degree, size_t coeff_modulus_size)
+    void Ciphertext::resize_internal(size_t size, size_t poly_modulus_degree, size_t coeff_modulus_size, util::MemoryType type)
     {
         if (use_half_data_) {
             if (size > SIGMA_CIPHERTEXT_SIZE_MAX) {
@@ -111,7 +111,13 @@ namespace sigma
 
         // Resize the data
         size_t new_data_size = mul_safe(size, poly_modulus_degree, coeff_modulus_size);
-        data_.resize(new_data_size);
+        if (type & MemoryTypeHost) {
+            data_.resize(new_data_size);
+        }
+        if (type & MemoryTypeDevice) {
+            device_data_.resize(new_data_size);
+        }
+        data_type_ = static_cast<MemoryType>(data_type_ | type);
 
         // Set the size parameters
         size_ = size;

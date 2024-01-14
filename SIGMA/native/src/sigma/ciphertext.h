@@ -138,6 +138,20 @@ namespace sigma
         */
         Ciphertext(const Ciphertext &copy) = default;
 
+        Ciphertext(const Ciphertext &copy, bool copy_device) : parms_id_(copy.parms_id_),
+                                                               is_ntt_form_(copy.is_ntt_form_),
+                                                               size_(copy.size_),
+                                                               poly_modulus_degree_(copy.poly_modulus_degree_),
+                                                               coeff_modulus_size_(copy.coeff_modulus_size_),
+                                                               scale_(copy.scale_),
+                                                               correction_factor_(copy.correction_factor_),
+                                                               data_(copy.data_),
+                                                               use_half_data_(copy.use_half_data_) {
+            if (copy_device) {
+                device_data_.copy_device_data(copy.device_data_.get(), copy.device_data_.size());
+            }
+        }
+
         /**
         Creates a new ciphertext by moving a given one.
 
@@ -226,7 +240,7 @@ namespace sigma
         parameters
         @throws std::invalid_argument if size is less than 2 or too large
         */
-        void resize(const SIGMAContext &context, parms_id_type parms_id, std::size_t size);
+        void resize(const SIGMAContext &context, parms_id_type parms_id, std::size_t size, util::MemoryType type = util::MemoryTypeHost);
 
         /**
         Resizes the ciphertext to given size, reallocating if the capacity
@@ -244,10 +258,10 @@ namespace sigma
         @throws std::invalid_argument if the encryption parameters are not valid
         @throws std::invalid_argument if size is less than 2 or too large
         */
-        inline void resize(const SIGMAContext &context, std::size_t size)
+        inline void resize(const SIGMAContext &context, std::size_t size, util::MemoryType type = util::MemoryTypeHost)
         {
             auto parms_id = context.first_parms_id();
-            resize(context, parms_id, size);
+            resize(context, parms_id, size, type);
         }
 
         /**
@@ -262,11 +276,11 @@ namespace sigma
         @param[in] size The new size
         @throws std::invalid_argument if size is less than 2 or too large
         */
-        inline void resize(std::size_t size)
+        inline void resize(std::size_t size, util::MemoryType type = util::MemoryTypeHost)
         {
             // Note: poly_modulus_degree_ and coeff_modulus_size_ are either valid
             // or coeff_modulus_size_ is zero (in which case no memory is allocated).
-            resize_internal(size, poly_modulus_degree_, coeff_modulus_size_);
+            resize_internal(size, poly_modulus_degree_, coeff_modulus_size_, type);
         }
 
         /**
@@ -331,6 +345,11 @@ namespace sigma
         SIGMA_NODISCARD inline const ct_coeff_type *data() const noexcept
         {
             return data_.cbegin();
+        }
+
+        SIGMA_NODISCARD inline const ct_coeff_type *device_data() const noexcept
+        {
+            return device_data_.get();
         }
 
         /**
@@ -500,6 +519,9 @@ namespace sigma
         inline std::streamoff save(
             std::ostream &stream, compr_mode_type compr_mode = Serialization::compr_mode_default) const
         {
+            if (!(data_type_ & util::MemoryTypeHost) || data_.empty()) {
+                throw std::runtime_error("data_ is empty.");
+            }
             using namespace std::placeholders;
             return Serialization::Save(
                 std::bind(&Ciphertext::save_members, this, _1), save_size(compr_mode_type::none), stream, compr_mode,
@@ -709,7 +731,11 @@ namespace sigma
         }
 
         inline void alloc_device_data() {
-            device_data_.resize(data_.size());
+            resize_internal(size_, poly_modulus_degree_, coeff_modulus_size_, util::MemoryTypeDevice);
+        }
+
+        inline void alloc_device_data(const Ciphertext &copy) {
+            resize_internal(copy.size_, copy.poly_modulus_degree_, copy.coeff_modulus_size_, util::MemoryTypeDevice);
         }
 
         inline void copy_to_device() {
@@ -717,11 +743,42 @@ namespace sigma
         }
 
         inline void retrieve_to_host() {
-            KernelProvider::retrieve(data_.begin(), device_data_.get(), data_.size());
+            if (!(data_type_ & util::MemoryTypeHost)) {
+                resize_internal(size_, poly_modulus_degree_, coeff_modulus_size_, util::MemoryTypeHost);
+            }
+            KernelProvider::retrieve(data_.begin(), device_data_.get(), device_data_.size());
+        }
+
+        inline void retrieve_to_host(cudaStream_t &stream) {
+            KernelProvider::retrieveAsync(data_.begin(), device_data_.get(), device_data_.size(), stream);
         }
 
         inline void release_device_data() {
             device_data_.release();
+        }
+
+        inline void copy_attributes(const Ciphertext &copy) {
+            parms_id_ = copy.parms_id_;
+            is_ntt_form_ = copy.is_ntt_form_;
+            size_ = copy.size_;
+            poly_modulus_degree_ = copy.poly_modulus_degree_;
+            coeff_modulus_size_ = copy.coeff_modulus_size_;
+            scale_ = copy.scale_;
+            correction_factor_ = copy.correction_factor_;
+            use_half_data_ = copy.use_half_data_;
+        }
+
+        inline void copy_device_from_host(const Ciphertext &copy) {
+            parms_id_ = copy.parms_id_;
+            is_ntt_form_ = copy.is_ntt_form_;
+            size_ = copy.size_;
+            poly_modulus_degree_ = copy.poly_modulus_degree_;
+            coeff_modulus_size_ = copy.coeff_modulus_size_;
+            scale_ = copy.scale_;
+            correction_factor_ = copy.correction_factor_;
+            data_ = copy.data_;
+            use_half_data_ = copy.use_half_data_;
+            device_data_.set_host_data(copy.data_.begin(), copy.data_.size());
         }
 
         /**
@@ -729,11 +786,14 @@ namespace sigma
         */
         struct CiphertextPrivateHelper;
 
+        util::DeviceArray<uint64_t> temp_noise_;
+
     private:
         void reserve_internal(
             std::size_t size_capacity, std::size_t poly_modulus_degree, std::size_t coeff_modulus_size);
 
-        void resize_internal(std::size_t size, std::size_t poly_modulus_degree, std::size_t coeff_modulus_size);
+        void resize_internal(std::size_t size, std::size_t poly_modulus_degree, std::size_t coeff_modulus_size,
+                             util::MemoryType type = util::MemoryTypeHost);
 
         void expand_seed(const SIGMAContext &context, const UniformRandomGeneratorInfo &prng_info, SIGMAVersion version);
 
@@ -765,5 +825,7 @@ namespace sigma
         util::DeviceArray<ct_coeff_type> device_data_;
 
         bool use_half_data_ = false;
+
+        util::MemoryType data_type_ = util::MemoryTypeNone;
     };
 } // namespace sigma

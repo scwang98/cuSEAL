@@ -8,7 +8,7 @@
 #include "sigma/encryptionparams.h"
 #include "sigma/memorymanager.h"
 #include "sigma/modulus.h"
-#include "sigma/plaintext.h"
+#include "sigma/plaintext.cuh"
 #include "sigma/randomgen.h"
 #include "sigma/secretkey.h"
 #include "sigma/util/defines.h"

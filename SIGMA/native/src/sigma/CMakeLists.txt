@@ -28,7 +28,7 @@ install(
         FILES
         ${CMAKE_CURRENT_LIST_DIR}/batchencoder.h
         ${CMAKE_CURRENT_LIST_DIR}/ciphertext.h
-        ${CMAKE_CURRENT_LIST_DIR}/ckks.h
+        ${CMAKE_CURRENT_LIST_DIR}/ckks.cuh
         ${CMAKE_CURRENT_LIST_DIR}/modulus.h
         ${CMAKE_CURRENT_LIST_DIR}/context.h
         ${CMAKE_CURRENT_LIST_DIR}/decryptor.h
@@ -40,7 +40,7 @@ install(
         ${CMAKE_CURRENT_LIST_DIR}/keygenerator.h
         ${CMAKE_CURRENT_LIST_DIR}/kswitchkeys.h
         ${CMAKE_CURRENT_LIST_DIR}/memorymanager.h
-        ${CMAKE_CURRENT_LIST_DIR}/plaintext.h
+        ${CMAKE_CURRENT_LIST_DIR}/plaintext.cuh
         ${CMAKE_CURRENT_LIST_DIR}/publickey.h
         ${CMAKE_CURRENT_LIST_DIR}/randomgen.h
         ${CMAKE_CURRENT_LIST_DIR}/randomtostd.h
@@ -51,7 +51,7 @@ install(
         ${CMAKE_CURRENT_LIST_DIR}/serialization.h
         ${CMAKE_CURRENT_LIST_DIR}/valcheck.h
         ${CMAKE_CURRENT_LIST_DIR}/version.h
-        ${CMAKE_CURRENT_LIST_DIR}/kernelprovider.h
+        ${CMAKE_CURRENT_LIST_DIR}/kernelprovider.cuh
         ${CMAKE_CURRENT_LIST_DIR}/kernelutils.cuh
         DESTINATION
         ${SIGMA_INCLUDES_INSTALL_DIR}/sigma

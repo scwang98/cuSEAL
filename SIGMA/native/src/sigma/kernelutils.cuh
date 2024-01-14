@@ -1,7 +1,7 @@
 
 #pragma once
 
-#include "kernelprovider.h"
+#include "kernelprovider.cuh"
 #include "util/devicearray.cuh"
 #include "util/hostarray.h"
 #include "util/uintarithsmallmod.h"
@@ -99,19 +99,35 @@ namespace sigma {
 
         void g_ntt_negacyclic_harvey(uint64_t *operand, size_t coeff_count, const util::NTTTables &tables);
 
-        void dyadic_product_coeffmod_inplace(
-                uint64_t *operand1, const uint64_t *operand2,
-                size_t coeff_count, size_t ntt_size, size_t coeff_modulus_size, const Modulus &modulus);
+        void g_ntt_negacyclic_harvey(uint64_t *operand, size_t coeff_count, const util::NTTTables &tables, cudaStream_t &cudaStream);
+
+        void dyadic_product_coeffmod(
+                const uint64_t *operand1, const uint64_t *operand2, size_t coeff_count, size_t ntt_size,
+                size_t coeff_modulus_size, const Modulus &modulus, uint64_t *result);
 
         void dyadic_product_coeffmod(
                 const uint64_t *operand1, const uint64_t *operand2, size_t coeff_count,size_t ntt_size,
-                size_t coeff_modulus_size, const Modulus &modulus, uint64_t *result);
+                size_t coeff_modulus_size, const Modulus &modulus, uint64_t *result, cudaStream_t &stream);
 
-        void sample_poly_cbd(util::RandomGenerator *random_generator, const Modulus *coeff_modulus, size_t coeff_modulus_size, size_t coeff_count, uint64_t *destination);
+        void sample_poly_cbd(
+                util::RandomGenerator *random_generator, const Modulus *coeff_modulus, size_t coeff_modulus_size,
+                size_t coeff_count, uint64_t *destination);
+
+        void sample_poly_cbd(
+                util::RandomGenerator *random_generator, const Modulus *coeff_modulus, size_t coeff_modulus_size,
+                size_t coeff_count, uint64_t *destination, cudaStream_t &stream);
 
         void add_negate_add_poly_coeffmod(
-                const uint64_t *operand1, const uint64_t *operand2, const uint64_t *operand3, std::size_t coeff_count, uint64_t modulus_value,
-                uint64_t *result);
+                const uint64_t *operand1, const uint64_t *operand2, const uint64_t *operand3, std::size_t coeff_count,
+                uint64_t modulus_value, uint64_t *result);
+
+        void add_negate_add_poly_coeffmod(
+                const uint64_t *operand1, const uint64_t *operand2, const uint64_t *operand3, std::size_t coeff_count,
+                uint64_t modulus_value, uint64_t *result, cudaStream_t &stream);
+
+        void add_poly_coeffmod(
+                const uint64_t *operand1, const uint64_t *operand2, size_t size, size_t coeff_modulus_size,
+                std::size_t coeff_count, uint64_t modulus_value, uint64_t *result);
 
     }
 }

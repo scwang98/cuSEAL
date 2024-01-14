@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
 
-#include "sigma/ckks.h"
+#include "sigma/ckks.cuh"
 #include "sigma/context.h"
 #include "sigma/keygenerator.h"
 #include "sigma/modulus.h"

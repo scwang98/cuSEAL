@@ -4,7 +4,7 @@
 #include "sigma/ciphertext.h"
 #include "sigma/galoiskeys.h"
 #include "sigma/kswitchkeys.h"
-#include "sigma/plaintext.h"
+#include "sigma/plaintext.cuh"
 #include "sigma/publickey.h"
 #include "sigma/relinkeys.h"
 #include "sigma/secretkey.h"

@@ -1,6 +1,6 @@
 
 #include "randomgenerator.cuh"
-#include "../kernelprovider.h"
+#include "../kernelprovider.cuh"
 
 namespace sigma::util {
     __global__
@@ -22,10 +22,15 @@ namespace sigma::util {
     }
 
     void RandomGenerator::generate(uint64_t *destination, size_t size) {
-        prepare_states(size);
         size_t thread_count = 256;
         size_t block_count = (size - 1) / thread_count + 1;
         generate_random<<<block_count, thread_count>>>(states_, destination, size);
+    }
+
+    void RandomGenerator::generate(uint64_t *destination, size_t size, cudaStream_t &stream) {
+        size_t thread_count = 256;
+        size_t block_count = (size - 1) / thread_count + 1;
+        generate_random<<<block_count, thread_count, 0, stream>>>(states_, destination, size);
     }
 
 

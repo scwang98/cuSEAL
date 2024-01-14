@@ -1,12 +1,12 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
 
-#include "sigma/ckks.h"
+#include "sigma/ckks.cuh"
 #include "sigma/context.h"
 #include "sigma/evaluator.h"
 #include "sigma/memorymanager.h"
 #include "sigma/modulus.h"
-#include "sigma/plaintext.h"
+#include "sigma/plaintext.cuh"
 #include <vector>
 #include "gtest/gtest.h"
 #ifdef SIGMA_USE_MSGSL

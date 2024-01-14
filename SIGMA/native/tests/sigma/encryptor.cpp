@@ -2,7 +2,7 @@
 // Licensed under the MIT license.
 
 #include "sigma/batchencoder.h"
-#include "sigma/ckks.h"
+#include "sigma/ckks.cuh"
 #include "sigma/context.h"
 #include "sigma/decryptor.h"
 #include "sigma/encryptor.h"

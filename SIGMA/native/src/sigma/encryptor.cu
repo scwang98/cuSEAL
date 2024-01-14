@@ -10,7 +10,7 @@
 #include "sigma/util/rlwe.h"
 #include "sigma/util/scalingvariant.h"
 #include "sigma/kernelutils.cuh"
-#include "kernelprovider.h"
+#include "kernelprovider.cuh"
 #include "sigma/util/randomgenerator.cuh"
 #include <chrono>
 #include <algorithm>
@@ -36,7 +36,7 @@ namespace sigma
         size_t coeff_count = parms.poly_modulus_degree();
         size_t coeff_modulus_size = coeff_modulus.size();
 
-        temp_noise_.resize(coeff_count * coeff_modulus_size);
+//        temp_noise_.resize(coeff_count * coeff_modulus_size);
 
         // Quick sanity check
         if (!product_fits_in(coeff_count, coeff_modulus_size, size_t(2)))
@@ -60,7 +60,10 @@ namespace sigma
         size_t coeff_count = parms.poly_modulus_degree();
         size_t coeff_modulus_size = coeff_modulus.size();
 
-        temp_noise_.resize(coeff_count * coeff_modulus_size);
+//        temp_noise_.resize(coeff_count * coeff_modulus_size);
+
+        random_generator_ = new RandomGenerator();
+        random_generator_->prepare_states(coeff_count);
 
         // Quick sanity check
         if (!product_fits_in(coeff_count, coeff_modulus_size, size_t(2)))
@@ -86,7 +89,7 @@ namespace sigma
         size_t coeff_count = parms.poly_modulus_degree();
         size_t coeff_modulus_size = coeff_modulus.size();
 
-        temp_noise_.resize(coeff_count * coeff_modulus_size);
+//        temp_noise_.resize(coeff_count * coeff_modulus_size);
 
         // Quick sanity check
         if (!product_fits_in(coeff_count, coeff_modulus_size, size_t(2)))
@@ -378,12 +381,12 @@ namespace sigma
         }
 
         auto &context_data = *context_.get_context_data(plain.parms_id());
-        auto &parms = context_data.parms();
-        auto &coeff_modulus = parms.coeff_modulus();
-        auto &device_coeff_modulus = parms.device_coeff_modulus();
+        auto &params = context_data.parms();
+        auto &coeff_modulus = params.coeff_modulus();
+        auto &device_coeff_modulus = params.device_coeff_modulus();
         auto ntt_tables = context_data.device_small_ntt_tables();
         size_t coeff_modulus_size = coeff_modulus.size();
-        size_t coeff_count = parms.poly_modulus_degree();
+        size_t coeff_count = params.poly_modulus_degree();
 
         destination.resize(context_, plain.parms_id(), 1);
         destination.is_ntt_form() = true;
@@ -393,12 +396,11 @@ namespace sigma
 
         uint64_t *c0 = destination.device_data();
 
-        if (!random_generator_) {
-            random_generator_ = new RandomGenerator();
-        }
-
 //        auto noise = DeviceArray<uint64_t>(coeff_count * coeff_modulus_size);
-        kernel_util::sample_poly_cbd(random_generator_, device_coeff_modulus.get(), coeff_modulus_size, coeff_count, temp_noise_.get());
+        destination.temp_noise_.resize(coeff_count * coeff_modulus_size);
+
+        kernel_util::sample_poly_cbd(
+                random_generator_, device_coeff_modulus.get(), coeff_modulus_size, coeff_count, destination.temp_noise_.get());
 
         auto plain_data = plain.device_data();
         auto c1_device_data = c1.device_data();
@@ -409,10 +411,10 @@ namespace sigma
                     coeff_count, 1, 1, coeff_modulus[i], c0 + i * coeff_count);
 
             // Transform the noise e into NTT representation
-            kernel_util::g_ntt_negacyclic_harvey(temp_noise_.get() + i * coeff_count, coeff_count, ntt_tables[i]);
+            kernel_util::g_ntt_negacyclic_harvey(destination.temp_noise_.get() + i * coeff_count, coeff_count, ntt_tables[i]);
 
             kernel_util::add_negate_add_poly_coeffmod(
-                    temp_noise_.get() + i * coeff_count, c0 + i * coeff_count, plain_data + i * coeff_count,
+                    destination.temp_noise_.get() + i * coeff_count, c0 + i * coeff_count, plain_data + i * coeff_count,
                     coeff_count, coeff_modulus[i].value(), c0 + i * coeff_count);
         }
 

@@ -23,8 +23,7 @@ int main() {
     size_t scale_power = ConfigUtil.int64ValueForKey("scale_power");
     double scale = pow(2.0, scale_power);
     size_t customized_scale_power = ConfigUtil.int64ValueForKey("customized_scale_power");
-    double customized_scale = pow(2.0, customized_scale_power);
-
+    float customized_scale = pow(2.0, float(customized_scale_power));
 
     auto slots = poly_modulus_degree / 2;
 
@@ -72,7 +71,7 @@ int main() {
 
         auto time_start0 = std::chrono::high_resolution_clock::now();
 
-        encoder.encode_double(vec, slots, scale, plain_vec);
+        encoder.encode_float(vec, slots, scale, plain_vec);
 
 //        auto time_end0 = std::chrono::high_resolution_clock::now();
 //        auto time_diff0 = std::chrono::duration_cast<std::chrono::microseconds >(time_end0 - time_start0);

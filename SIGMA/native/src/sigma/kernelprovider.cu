@@ -1,5 +1,5 @@
 
-#include "kernelprovider.h"
+#include "kernelprovider.cuh"
 
 namespace sigma {
 

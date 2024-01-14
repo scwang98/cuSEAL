@@ -64,6 +64,15 @@ namespace sigma {
         }
 
         template<typename T>
+        static void copyAsync(T *deviceDestPtr, const T *hostFromPtr, size_t length, cudaStream_t &stream) {
+            checkInitialized();
+            if (length == 0) return;
+            auto status = cudaMemcpyAsync(deviceDestPtr, hostFromPtr, length * sizeof(T), cudaMemcpyHostToDevice, stream);
+            if (status != cudaSuccess)
+                throw std::runtime_error("Cuda copy from host to device failed.");
+        }
+
+        template<typename T>
         static void copyOnDevice(T *deviceDestPtr, const T *deviceFromPtr, size_t length) {
             checkInitialized();
             if (length == 0) return;
@@ -77,6 +86,15 @@ namespace sigma {
             checkInitialized();
             if (length == 0) return;
             auto status = cudaMemcpy(hostDestPtr, deviceFromPtr, length * sizeof(T), cudaMemcpyDeviceToHost);
+            if (status != cudaSuccess)
+                throw std::runtime_error("Cuda retrieve from device to host failed.");
+        }
+
+        template<typename T>
+        static void retrieveAsync(T *hostDestPtr, const T *deviceFromPtr, size_t length, cudaStream_t &stream) {
+            checkInitialized();
+            if (length == 0) return;
+            auto status = cudaMemcpyAsync(hostDestPtr, deviceFromPtr, length * sizeof(T), cudaMemcpyDeviceToHost, stream);
             if (status != cudaSuccess)
                 throw std::runtime_error("Cuda retrieve from device to host failed.");
         }

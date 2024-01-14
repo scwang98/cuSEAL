@@ -7,7 +7,7 @@
 #include "sigma/context.h"
 #include "sigma/encryptionparams.h"
 #include "sigma/memorymanager.h"
-#include "sigma/plaintext.h"
+#include "sigma/plaintext.cuh"
 #include "sigma/publickey.h"
 #include "sigma/secretkey.h"
 #include "sigma/serializable.h"
@@ -452,6 +452,6 @@ namespace sigma
 
         util::RandomGenerator *random_generator_ = nullptr;
 
-        util::DeviceArray<uint64_t> temp_noise_;
+//        util::DeviceArray<uint64_t> temp_noise_;
     };
 } // namespace sigma

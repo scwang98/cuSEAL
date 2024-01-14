@@ -40,7 +40,7 @@ target_link_libraries(keygen PRIVATE -lcurand)
 
 
 add_executable(encrypt
-        encrypt.cpp
+        encrypt.cu
         ${CUSEAL_UTIL_FILES}
 )
 target_link_libraries(encrypt PRIVATE SIGMA::sigma)
@@ -50,7 +50,7 @@ target_link_libraries(encrypt PRIVATE -lcurand)
 
 
 add_executable(calculate
-        calculate.cpp
+        calculate.cu
         ${CUSEAL_UTIL_FILES}
 )
 target_link_libraries(calculate PRIVATE SIGMA::sigma)

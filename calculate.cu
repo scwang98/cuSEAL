@@ -18,9 +18,19 @@ std::string ip_results_path(size_t index) {
     return "../data/ip_results/probe_" + std::to_string(index) + "_results.dat";
 }
 
-int main() {
+#define CUDA_TIME_START cudaEvent_t start, stop;\
+                        cudaEventCreate(&start);\
+                        cudaEventCreate(&stop);\
+                        cudaEventRecord(start);\
+                        cudaEventQuery(start);
 
-    TIMER_START;
+#define CUDA_TIME_STOP cudaEventRecord(stop);\
+                       cudaEventSynchronize(stop);\
+                       float elapsed_time;\
+                       cudaEventElapsedTime(&elapsed_time, start, stop);\
+                       std::cout << "Time = " << elapsed_time << " ms." << std::endl;\
+
+int main() {
 
     size_t poly_modulus_degree = ConfigUtil.int64ValueForKey("poly_modulus_degree");
     size_t scale_power = ConfigUtil.int64ValueForKey("scale_power");
@@ -59,7 +69,7 @@ int main() {
 
     auto probe_data = util::read_npy_data(FILE_STORE_PATH + "probe_x.npy");
     // TODO: remove @wangshuchao
-    probe_data.assign(probe_data.begin(), probe_data.begin() + 3);
+    probe_data.assign(probe_data.begin(), probe_data.begin() + 100);
 
     sigma::CKKSEncoder encoder(context);
     sigma::Evaluator evaluator(context);
@@ -68,34 +78,60 @@ int main() {
 
     std::ofstream c1_ofs(c1s_data_path, std::ios::binary);
 
+    TIMER_START;
+
+    c1.copy_to_device();
+
+    sigma::Ciphertext c1_sum;
+    sigma::Ciphertext c1_row;
+    sigma::Ciphertext result;
+    sigma::Ciphertext row;
+
+    std::vector<sigma::Plaintext> encoded_probes(dimension);
     for (size_t pi = 0; pi < probe_data.size(); ++pi) {
         const auto& probe = probe_data[pi];
-        std::vector<sigma::Plaintext> encoded_probes(dimension);
-        encoder.encode(probe[0], scale, encoded_probes[0]);
-        auto c1_sum = c1;
-        evaluator.multiply_plain_inplace(c1_sum, encoded_probes[0]);
-        for (int i = 1; i < dimension; ++i) {
-            encoder.encode(probe[i], scale, encoded_probes[i]);
+        // 0.012
+        encoder.cu_encode(probe[0], scale, encoded_probes[0]);
 
-            auto row = c1;
-            evaluator.multiply_plain_inplace(row, encoded_probes[i]);
-            evaluator.add_inplace(c1_sum, row);
+        evaluator.cu_multiply_plain(c1, encoded_probes[0], c1_sum);
+        for (int i = 1; i < dimension; ++i) {
+
+            // 0.008
+            encoder.cu_encode(probe[i], scale, encoded_probes[i]);
+
+            evaluator.cu_multiply_plain(c1, encoded_probes[i], c1_row);
+            // 0.006
+            evaluator.cu_add_inplace(c1_sum, c1_row);
         }
+        c1_sum.retrieve_to_host();
+        // 0.07
         c1_sum.save(c1_ofs);
 
         std::ofstream ofs(ip_results_path(pi), std::ios::binary);
         size_t calculate_size = gallery_data.size() / 512 * 512;
-        std::vector<sigma::Ciphertext> results;
+//        std::vector<sigma::Ciphertext> results;
         for (size_t offset = 0; offset < calculate_size; offset += dimension) {
-            auto result = gallery_data[offset];
-            evaluator.multiply_plain_inplace(result, encoded_probes[0]);
+            if (pi == 0) {
+                gallery_data[offset].copy_to_device();
+            }
+            evaluator.cu_multiply_plain(gallery_data[offset], encoded_probes[0], result);
             for (size_t i = 1; i < dimension; i++) {
-                auto row = gallery_data[offset + i];
-                evaluator.multiply_plain_inplace(row, encoded_probes[i]);
-                evaluator.add_inplace(result, row);
+                if (pi == 0) {
+                    gallery_data[offset + i].copy_to_device();
+                }
+                evaluator.cu_multiply_plain(gallery_data[offset + i], encoded_probes[i], row);
+
+                // 0.007
+                evaluator.cu_add_inplace(result, row);
+
 //                std::cout << "offset=" << offset << " " << "i=" << i << std::endl;
             }
+            // 0.041
+            result.retrieve_to_host();
+//            CUDA_TIME_START
+            // 0.065
             result.save(ofs);
+//            CUDA_TIME_STOP
         }
         ofs.close();
 //        std::cout << "calculate end " << pi << std::endl;  // TODO: remove @wangshuchao
