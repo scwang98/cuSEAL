@@ -4,7 +4,7 @@
 
 #include "vectorutil.h"
 #include "../extern/cnpy/cnpy.h"
-#include "sigma/util/HostList.h"
+#include "util/HostList.h"
 #include <cmath>
 #include <vector>
 

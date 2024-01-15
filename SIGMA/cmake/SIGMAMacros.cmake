@@ -42,7 +42,7 @@ macro(sigma_set_include_directories target)
         $<BUILD_INTERFACE:${SIGMA_INCLUDES_DIR}>
         $<INSTALL_INTERFACE:${SIGMA_INCLUDES_INSTALL_DIR}>)
     target_include_directories(${target} PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/native/src/>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/src/>
         $<INSTALL_INTERFACE:${SIGMA_INCLUDES_INSTALL_DIR}>)
 endmacro()
 

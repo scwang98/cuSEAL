@@ -2,7 +2,7 @@
 // Created by scwang on 2023/11/12.
 //
 
-#include <sigma/sigma.h>
+#include <sigma.h>
 
 #ifndef CUSEAL_KEYUTIL_H
 #define CUSEAL_KEYUTIL_H

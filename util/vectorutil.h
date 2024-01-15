@@ -4,7 +4,7 @@
 
 #include <string>
 #include <vector>
-#include "sigma/util/HostList.h"
+#include "util/HostList.h"
 
 #ifndef CUSEAL_VECTORUTIL_H
 #define CUSEAL_VECTORUTIL_H

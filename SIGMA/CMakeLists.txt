@@ -94,9 +94,9 @@ set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}")
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 # Source Tree
-set(SIGMA_INCLUDES_DIR ${CMAKE_CURRENT_LIST_DIR}/native/src)
+set(SIGMA_INCLUDES_DIR ${CMAKE_CURRENT_LIST_DIR}/src)
 set(SIGMA_CONFIG_IN_FILENAME ${CMAKE_CURRENT_LIST_DIR}/cmake/SIGMAConfig.cmake.in)
-set(SIGMA_CONFIG_H_IN_FILENAME ${SIGMA_INCLUDES_DIR}/sigma/util/config.h.in)
+set(SIGMA_CONFIG_H_IN_FILENAME ${SIGMA_INCLUDES_DIR}/util/config.h.in)
 
 # Build tree
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/${OUTLIB_PATH})
@@ -105,7 +105,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/bin)
 set(SIGMA_TARGETS_FILENAME ${CMAKE_CURRENT_BINARY_DIR}/cmake/SIGMATargets.cmake)
 set(SIGMA_CONFIG_FILENAME ${CMAKE_CURRENT_BINARY_DIR}/cmake/SIGMAConfig.cmake)
 set(SIGMA_CONFIG_VERSION_FILENAME ${CMAKE_CURRENT_BINARY_DIR}/cmake/SIGMAConfigVersion.cmake)
-set(SIGMA_CONFIG_H_FILENAME ${CMAKE_CURRENT_BINARY_DIR}/native/src/sigma/util/config.h)
+set(SIGMA_CONFIG_H_FILENAME ${CMAKE_CURRENT_BINARY_DIR}/src/util/config.h)
 set(SIGMA_THIRDPARTY_DIR ${CMAKE_CURRENT_BINARY_DIR}/thirdparty)
 
 # Install
@@ -380,7 +380,7 @@ mark_as_advanced(FORCE SIGMA_USE_ALIGNED_ALLOC)
 
 # Add source files to library and header files to install
 set(SIGMA_SOURCE_FILES "")
-add_subdirectory(native/src/sigma)
+add_subdirectory(src)
 
 # Create the config file
 configure_file(${SIGMA_CONFIG_H_IN_FILENAME} ${SIGMA_CONFIG_H_FILENAME})
@@ -677,45 +677,6 @@ if(UNIX OR APPLE)
     endif()
 endif()
 
-#####################
-# SIGMA C++ examples #
-#####################
-
-# [option] SIGMA_BUILD_EXAMPLES
-set(SIGMA_BUILD_EXAMPLES_OPTION_STR "Build C++ examples for Microsoft SIGMA")
-option(SIGMA_BUILD_EXAMPLES ${SIGMA_BUILD_EXAMPLES_OPTION_STR} OFF)
-message(STATUS "SIGMA_BUILD_EXAMPLES: ${SIGMA_BUILD_EXAMPLES}")
-
-if(SIGMA_BUILD_EXAMPLES)
-    add_subdirectory(native/examples)
-endif()
-
-##################
-# SIGMA C++ tests #
-##################
-
-# [option] SIGMA_BUILD_TESTS
-set(SIGMA_BUILD_TESTS_OPTION_STR "Build C++ tests for Microsoft SIGMA")
-option(SIGMA_BUILD_TESTS ${SIGMA_BUILD_TESTS_OPTION_STR} OFF)
-message(STATUS "SIGMA_BUILD_TESTS: ${SIGMA_BUILD_TESTS}")
-
-if(SIGMA_BUILD_TESTS)
-    add_subdirectory(native/tests)
-endif()
-
-#######################
-# SIGMA C++ benchmarks #
-#######################
-
-# [option] SIGMA_BUILD_BENCH
-set(SIGMA_BUILD_BENCH_OPTION_STR "Build C++ benchmarks for Microsoft SIGMA")
-option(SIGMA_BUILD_BENCH ${SIGMA_BUILD_BENCH_OPTION_STR} OFF)
-message(STATUS "SIGMA_BUILD_BENCH: ${SIGMA_BUILD_BENCH}")
-
-if(SIGMA_BUILD_BENCH)
-    add_subdirectory(native/bench)
-endif()
-
 #######################################
 # Configure SIGMANet and NuGet package #
 #######################################
@@ -731,37 +692,6 @@ if(SIGMA_IS_MULTI_CONFIG_GENERATOR)
     set(SIGMA_WINDOWS_SIGMA_C_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CMAKE_BUILD_TYPE})
 endif()
 
-# Create SIGMANet.csproj, SIGMANetExamples.csproj, and SIGMANetTest.csproj
-configure_file(
-    ${CMAKE_CURRENT_LIST_DIR}/dotnet/src/SIGMANet.csproj.in
-    ${CMAKE_CURRENT_BINARY_DIR}/dotnet/src/SIGMANet.csproj
-    @ONLY)
-configure_file(
-    ${CMAKE_CURRENT_LIST_DIR}/dotnet/tests/SIGMANetTest.csproj.in
-    ${CMAKE_CURRENT_BINARY_DIR}/dotnet/tests/SIGMANetTest.csproj
-    @ONLY)
-configure_file(
-    ${CMAKE_CURRENT_LIST_DIR}/dotnet/examples/SIGMANetExamples.csproj.in
-    ${CMAKE_CURRENT_BINARY_DIR}/dotnet/examples/SIGMANetExamples.csproj
-    @ONLY)
-
-# Create SIGMANet.sln for Visual Studio to build all dotnet projects
-configure_file(
-    ${CMAKE_CURRENT_LIST_DIR}/dotnet/SIGMANet.sln.in
-    ${CMAKE_CURRENT_BINARY_DIR}/dotnet/SIGMANet.sln
-    @ONLY)
-
-# Set the sigmac dynamic library file names to be included in creating
-# the NuGet package. When building a multi-platform NuGet package, the
-# dynamic library paths need to be specified explicitly in the NuGet
-# command. See dotnet/nuget/SIGMANet.nuspec.in.
-
-# Create SIGMANet-multi.nuspec for a multi-platform NuGet package
-configure_file(
-    ${CMAKE_CURRENT_LIST_DIR}/dotnet/nuget/SIGMANet-multi.nuspec.in
-    ${CMAKE_CURRENT_BINARY_DIR}/dotnet/nuget/SIGMANet-multi.nuspec
-    @ONLY)
-
 set(NUGET_WINDOWS_SIGMA_C_PATH "")
 set(NUGET_LINUX_SIGMA_C_PATH "")
 set(NUGET_MACOS_SIGMA_C_PATH "")
@@ -775,8 +705,3 @@ elseif(APPLE)
     set(NUGET_MACOS_SIGMA_C_PATH ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libsigmac.dylib)
 endif()
 
-# Create SIGMANet.nuspec for a local NuGet pack from SIGMANet.nuspec.in
-configure_file(
-    ${CMAKE_CURRENT_LIST_DIR}/dotnet/nuget/SIGMANet.nuspec.in
-    ${CMAKE_CURRENT_BINARY_DIR}/dotnet/nuget/SIGMANet.nuspec
-    @ONLY)

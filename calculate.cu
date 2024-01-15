@@ -2,7 +2,7 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
-#include <sigma/sigma.h>
+#include <sigma.h>
 
 #include "extern/jsoncpp/json/json.h"
 #include "util/configmanager.h"
