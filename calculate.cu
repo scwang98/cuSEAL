@@ -9,14 +9,6 @@
 #include "util/vectorutil.h"
 #include "util/keyutil.h"
 
-const std::string encrypted_data_path = "../data/gallery.dat";
-const std::string encrypted_c1_data_path = "../data/encrypted_c1.dat";
-const std::string c1s_data_path = "../data/ip_results/encrypted_c1.dat";
-const static std::string FILE_STORE_PATH = "../vectors/";
-
-std::string ip_results_path(size_t index) {
-    return "../data/ip_results/probe_" + std::to_string(index) + "_results.dat";
-}
 
 #define CUDA_TIME_START cudaEvent_t start, stop;\
                         cudaEventCreate(&start);\
@@ -29,6 +21,20 @@ std::string ip_results_path(size_t index) {
                        float elapsed_time;\
                        cudaEventElapsedTime(&elapsed_time, start, stop);\
                        std::cout << "Time = " << elapsed_time << " ms." << std::endl;
+
+
+const std::string encrypted_data_path = "../data/gallery.dat";
+const std::string encrypted_c1_data_path = "../data/encrypted_c1.dat";
+const std::string c1s_data_path = "../data/ip_results/encrypted_c1.dat";
+const static std::string FILE_STORE_PATH = "../vectors/";
+
+std::string ip_results_path(size_t index) {
+    return "../data/ip_results/probe_" + std::to_string(index) + "_results.dat";
+}
+
+
+std::vector<sigma::Ciphertext> gallery_data;
+std::vector<std::vector<float>> probe_data;
 
 int main() {
 
@@ -53,7 +59,6 @@ int main() {
     c1.load(context, c1_ifs);
     c1_ifs.close();
 
-    std::vector<sigma::Ciphertext> gallery_data;
     std::ifstream gifs(encrypted_data_path, std::ios::binary);
     while (!gifs.eof()) {
         sigma::Ciphertext encrypted_vec;
@@ -67,16 +72,14 @@ int main() {
     }
     gifs.close();
 
-    auto probe_data = util::read_npy_data(FILE_STORE_PATH + "probe_x.npy");
+    probe_data = util::read_npy_data(FILE_STORE_PATH + "probe_x.npy");
     // TODO: remove @wangshuchao
-    probe_data.assign(probe_data.begin(), probe_data.begin() + 200);
+    probe_data.assign(probe_data.begin(), probe_data.begin() + 10);
 
     sigma::CKKSEncoder encoder(context);
     sigma::Evaluator evaluator(context);
 
     size_t dimension = 512;
-
-    std::ofstream c1_ofs(c1s_data_path, std::ios::binary);
 
     TIMER_START;
 
@@ -107,10 +110,12 @@ int main() {
         }
         // 0.036
         c1_sum.retrieve_to_host();
-        // 0.07
-        c1_sum.save(c1_ofs);
 
         std::ofstream ofs(ip_results_path(pi), std::ios::binary);
+
+        // 0.07
+        c1_sum.save(ofs);
+
         size_t calculate_size = gallery_data.size() / 512 * 512;
 //        std::vector<sigma::Ciphertext> results;
         for (size_t offset = 0; offset < calculate_size; offset += dimension) {
@@ -142,7 +147,9 @@ int main() {
         ofs.close();
 //        std::cout << "calculate end " << pi << std::endl;  // TODO: remove @wangshuchao
     }
-    c1_ofs.close();
+
+    gallery_data.clear();
+    probe_data.clear();
 
     TIMER_PRINT_NOW(Calculate_inner_product);
 

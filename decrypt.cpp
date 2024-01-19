@@ -79,7 +79,7 @@ int main() {
     size_t customized_scale_power = ConfigUtil.int64ValueForKey("customized_scale_power");
     double customized_scale = pow(2.0, customized_scale_power);
 
-    std::ifstream c1_ifs(encrypted_c1_data_path, std::ios::binary);
+//    std::ifstream c1_ifs(encrypted_c1_data_path, std::ios::binary);
 
     Json::Value root;
     for (size_t i = 0;; i++) {
@@ -90,7 +90,7 @@ int main() {
 
         sigma::Ciphertext c1;
         c1.use_half_data() = true;
-        c1.load(context, c1_ifs);
+        c1.load(context, ifs);
 
         TopNPairs pairs(5);
         size_t idx = 0;
