@@ -28,7 +28,7 @@ std::string ip_results_path(size_t index) {
                        cudaEventSynchronize(stop);\
                        float elapsed_time;\
                        cudaEventElapsedTime(&elapsed_time, start, stop);\
-                       std::cout << "Time = " << elapsed_time << " ms." << std::endl;\
+                       std::cout << "Time = " << elapsed_time << " ms." << std::endl;
 
 int main() {
 
@@ -69,7 +69,7 @@ int main() {
 
     auto probe_data = util::read_npy_data(FILE_STORE_PATH + "probe_x.npy");
     // TODO: remove @wangshuchao
-    probe_data.assign(probe_data.begin(), probe_data.begin() + 100);
+    probe_data.assign(probe_data.begin(), probe_data.begin() + 200);
 
     sigma::CKKSEncoder encoder(context);
     sigma::Evaluator evaluator(context);
@@ -90,19 +90,22 @@ int main() {
     std::vector<sigma::Plaintext> encoded_probes(dimension);
     for (size_t pi = 0; pi < probe_data.size(); ++pi) {
         const auto& probe = probe_data[pi];
-        // 0.012
+        // 0.022
         encoder.cu_encode(probe[0], scale, encoded_probes[0]);
 
+        // 0.008
         evaluator.cu_multiply_plain(c1, encoded_probes[0], c1_sum);
         for (int i = 1; i < dimension; ++i) {
 
-            // 0.008
+            // 0.012
             encoder.cu_encode(probe[i], scale, encoded_probes[i]);
 
+            // 0.006
             evaluator.cu_multiply_plain(c1, encoded_probes[i], c1_row);
             // 0.006
             evaluator.cu_add_inplace(c1_sum, c1_row);
         }
+        // 0.036
         c1_sum.retrieve_to_host();
         // 0.07
         c1_sum.save(c1_ofs);
@@ -112,13 +115,16 @@ int main() {
 //        std::vector<sigma::Ciphertext> results;
         for (size_t offset = 0; offset < calculate_size; offset += dimension) {
             if (pi == 0) {
+                // 0.058
                 gallery_data[offset].copy_to_device();
             }
+            // 0.009
             evaluator.cu_multiply_plain(gallery_data[offset], encoded_probes[0], result);
             for (size_t i = 1; i < dimension; i++) {
                 if (pi == 0) {
                     gallery_data[offset + i].copy_to_device();
                 }
+                // 0.007
                 evaluator.cu_multiply_plain(gallery_data[offset + i], encoded_probes[i], row);
 
                 // 0.007
@@ -126,7 +132,7 @@ int main() {
 
 //                std::cout << "offset=" << offset << " " << "i=" << i << std::endl;
             }
-            // 0.041
+            // 0.028
             result.retrieve_to_host();
 //            CUDA_TIME_START
             // 0.065
