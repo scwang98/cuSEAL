@@ -2,9 +2,12 @@ cmake_minimum_required(VERSION 3.22)
 
 set(CMAKE_CUDA_COMPILER "/usr/local/cuda/bin/nvcc")
 
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --default-stream per-thread")
+
 project(cuSEAL  LANGUAGES C CXX CUDA)
 
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CUDA_STANDARD 17)
 
 find_package(CUDA  REQUIRED)
 include_directories("${CUDA_INCLUDE_DIRS}")
