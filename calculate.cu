@@ -10,20 +10,20 @@
 #include "util/keyutil.h"
 
 
-//#define CUDA_TIME_START cudaEvent_t start, stop;\
-//                        cudaEventCreate(&start);\
-//                        cudaEventCreate(&stop);\
-//                        cudaEventRecord(start);\
-//                        cudaEventQuery(start);
-//
-//#define CUDA_TIME_STOP cudaEventRecord(stop);\
-//                       cudaEventSynchronize(stop);\
-//                       float elapsed_time;\
-//                       cudaEventElapsedTime(&elapsed_time, start, stop);\
-//                       std::cout << "Time = " << elapsed_time << " ms." << std::endl;
+#define CUDA_TIME_START cudaEvent_t start, stop;\
+                        cudaEventCreate(&start);\
+                        cudaEventCreate(&stop);\
+                        cudaEventRecord(start);\
+                        cudaEventQuery(start);
+
+#define CUDA_TIME_STOP cudaEventRecord(stop);\
+                       cudaEventSynchronize(stop);\
+                       float elapsed_time;\
+                       cudaEventElapsedTime(&elapsed_time, start, stop);\
+                       std::cout << "Time = " << elapsed_time << " ms." << std::endl;
 
 #define DIMENSION 512
-#define THREAD_SIZE 8
+#define THREAD_SIZE 3
 #define PROBE_SIZE 1000
 
 const std::string encrypted_data_path = "../data/gallery.dat";
@@ -63,7 +63,9 @@ void calculate(sigma::SIGMAContext &context, const sigma::Ciphertext &c1, double
 
         const auto &probe = probe_data[index];
         // 0.022
+//        CUDA_TIME_START
         encoder.cu_encode(probe[0], scale, encoded_probes[0]);
+//        CUDA_TIME_STOP
 
         // 0.008
         evaluator.cu_multiply_plain(c1, encoded_probes[0], c1_sum);
