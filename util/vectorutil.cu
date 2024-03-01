@@ -8,6 +8,10 @@
 #include <cmath>
 #include <vector>
 
+#include <faiss/IndexFlat.h>
+#include <faiss/IndexIVFFlat.h>
+#include <faiss/invlists/InvertedLists.h>
+
 namespace util {
 
     double calculateMagnitude(const std::vector<float> &vector) {
@@ -69,6 +73,106 @@ namespace util {
         return matrix;
     }
 
+    void kmeans_clustering(
+            size_t dimension,
+            const float *training_set,
+            size_t training_set_size,
+            std::vector<std::vector<float>> &cluster,
+            std::vector<std::vector<int64_t>> &indexes,
+            std::vector<float> &centroids,
+            size_t centroids_size) {
+        faiss::IndexFlatIP quantizer(dimension);
+        faiss::IndexIVFFlat index(&quantizer, dimension, centroids_size);
+        index.train(training_set_size, training_set);
+        index.add(training_set_size, training_set);
+
+//        centroids.resize(centroids_size * dimension);
+        memcpy(centroids.data(), quantizer.codes.data(), sizeof(float) * centroids_size * dimension);
+
+        auto inv_lists = dynamic_cast<faiss::ArrayInvertedLists *>(index.invlists);
+//        cluster.resize(centroids_size);
+//        indexes.resize(centroids_size);
+        for (int i = 0; i < centroids_size; i++) {
+            auto &inv_data = inv_lists->codes[i];
+            auto &clu_data = cluster[i];
+            auto inv_len = sizeof(unsigned char) * inv_data.size();
+            clu_data.resize(inv_len / sizeof(float));
+            memcpy(clu_data.data(), inv_data.data(), inv_len);
+
+            indexes[i] = inv_lists->ids[i];
+        }
+    }
+
+    // matrix, capacity, size
+    std::tuple<float *, size_t, size_t>
+    format_matrix(std::vector<float> &vec, size_t batch_size, size_t single_size, float scale) {
+        auto origin_size = vec.size() / single_size;
+        auto slots = single_size * batch_size;
+        size_t size = origin_size / slots * single_size;
+        auto end_row = size;
+        if (origin_size % slots != 0) {
+            size += single_size;
+        }
+        auto data = vec.data();
+        auto matrix = new float[size * slots];
+        for (size_t offset = 0; offset < end_row; offset += single_size) {
+            auto matrix_start = matrix + (offset * slots);
+            auto data_start = data + (offset * slots);
+            for (size_t i = 0; i < single_size; i++) {
+                auto line_ptr = matrix_start + (i * slots);
+                auto data_ptr = data_start + i;
+                for (size_t j = 0; j < slots; j++) {
+                    *(line_ptr + j) = *(data_ptr + j * single_size) * scale;
+                }
+            }
+        }
+        if (size != end_row) {
+            auto matrix_start = matrix + (end_row * slots);
+            std::fill_n(matrix_start, single_size * slots, 0);
+            auto data_start = data + (end_row * slots);
+
+            for (size_t i = 0; i < origin_size - end_row * (slots / single_size); i++) {
+                auto row_ptr = matrix_start + i;
+                auto data_ptr = data_start + i * single_size;
+                for (size_t j = 0; j < single_size; j++) {
+                    *(row_ptr + j * slots) = *(data_ptr + j) * scale;
+                }
+            }
+        }
+
+        return std::tuple{matrix, size, origin_size};
+    }
+
+
+    std::vector<std::tuple<float *, size_t, size_t>>
+    read_cluster_npy_data(const std::string &npy_name, size_t slots, float scale, std::vector<std::vector<int64_t>> &indexes) {
+        cnpy::NpyArray arr = cnpy::npy_load(npy_name);
+        std::vector<size_t> shape = arr.shape;
+        size_t single_size = shape[1];
+        auto batch_size = slots / single_size;
+
+        auto data = arr.data<float>();
+
+        size_t centroids_size = 30;
+
+        std::vector<std::vector<float>> cluster(centroids_size);
+        indexes.resize(centroids_size);
+        std::vector<float> centroids(centroids_size * single_size);
+        kmeans_clustering(single_size, data, shape[0], cluster, indexes, centroids, centroids_size);
+
+        std::vector<std::tuple<float *, size_t, size_t>> formatted_cluster;
+        formatted_cluster.reserve(cluster.size());
+        for (uint i = 0; i < cluster.size(); i++) {
+            formatted_cluster.push_back(format_matrix(cluster[i], batch_size, single_size, scale));
+        }
+//        for (auto& vec : cluster) {
+//            formatted_cluster.push_back(format_matrix(vec, batch_size, single_size, scale));
+//        }
+        cluster.clear();
+
+        return formatted_cluster;
+    }
+
     float *read_formatted_npy_data(const std::string &npy_name, size_t slots, float scale, size_t &size) {
         cnpy::NpyArray arr = cnpy::npy_load(npy_name);
         std::vector<size_t> shape = arr.shape;
@@ -120,7 +224,7 @@ namespace util {
         std::vector<size_t> shape;
         bool fortran_order;
         cnpy::parse_npy_header(fp_, word_size_, shape, fortran_order);
-        size_t single_size = 512;
+//        size_t single_size = 512;
         auto batch_size = slots / 512;
         row_ = shape[0] / batch_size;
         col_ = slots;
@@ -135,7 +239,7 @@ namespace util {
             return nullptr;
         }
         float *data = nullptr;
-        cudaMallocHost((void **)&data, col_ * 512 * sizeof(float));
+        cudaMallocHost((void **) &data, col_ * 512 * sizeof(float));
 
         auto data_start = data;
         auto temp_start = temp_;

@@ -1,7 +1,11 @@
 
 #include <iostream>
 #include <fstream>
+#include <iomanip>
 #include <sigma.h>
+
+#include <faiss/IndexFlat.h>
+#include <faiss/Clustering.h>
 
 #include "extern/jsoncpp/json/json.h"
 #include "util/configmanager.h"
@@ -13,6 +17,12 @@ const std::string secret_key_data_path = "../data/secret_key.dat";
 const std::string encrypted_data_path = "../data/gallery.dat";
 const std::string encrypted_c1_data_path = "../data/encrypted_c1.dat";
 const static std::string FILE_STORE_PATH = "../vectors/";
+
+std::string gallery_data_path(size_t index) {
+    std::ostringstream oss;
+    oss << std::setw(5) << std::setfill('0') << index;
+    return "../data/gallery_data/gallery_" + oss.str() + "_results.dat";
+}
 
 int main() {
 
@@ -27,8 +37,12 @@ int main() {
 
     auto slots = poly_modulus_degree / 2;
 
-    size_t gallery_size = 0;
-    auto gallery_ptr = util::read_formatted_npy_data(FILE_STORE_PATH + "gallery_x.npy", slots, customized_scale, gallery_size);
+//    size_t gallery_size = 0;
+//    auto gallery_ptr = util::read_formatted_npy_data(FILE_STORE_PATH + "gallery_x.npy", slots, customized_scale, gallery_size);
+
+    std::vector<std::vector<int64_t>> indexes;
+    auto tuples = util::read_cluster_npy_data(FILE_STORE_PATH + "gallery_x.npy", slots, customized_scale, indexes);
+
 
     sigma::KernelProvider::initialize();
 
@@ -59,39 +73,67 @@ int main() {
 
     c1.copy_to_device();
 
-    std::ofstream ofs(encrypted_data_path, std::ios::binary);
-
     std::cout << "Encode and encrypt start" << std::endl;
     auto time_start = std::chrono::high_resolution_clock::now();
 
-    sigma::Plaintext plain_vec;
-    sigma::Ciphertext ciphertext;
-    for (int i = 0; i < gallery_size; ++i) {
-        auto vec = gallery_ptr + (i * slots);
+    for (uint idx = 0; idx < tuples.size(); idx++) {
+        auto gallery_ptr = std::get<0>(tuples[idx]);
+        auto gallery_size = std::get<1>(tuples[idx]);
 
-        auto time_start0 = std::chrono::high_resolution_clock::now();
+        auto path = gallery_data_path(idx);
+        std::ofstream ofs(path, std::ios::binary);
 
-        encoder.encode_float(vec, slots, scale, plain_vec);
+        sigma::Plaintext plain_vec;
+        sigma::Ciphertext ciphertext;
+        for (int i = 0; i < gallery_size; ++i) {
+            auto vec = gallery_ptr + (i * slots);
 
-//        auto time_end0 = std::chrono::high_resolution_clock::now();
-//        auto time_diff0 = std::chrono::duration_cast<std::chrono::microseconds >(time_end0 - time_start0);
-//        std::cout << "encrypt file end [" << time_diff0.count() << " microseconds]" << std::endl;
+            encoder.encode_float(vec, slots, scale, plain_vec);
 
-//        auto time_start1 = std::chrono::high_resolution_clock::now();
+            ciphertext.use_half_data() = true;
+            encryptor.encrypt_symmetric_ckks(plain_vec, ciphertext, c1);
 
-        ciphertext.use_half_data() = true;
-        encryptor.encrypt_symmetric_ckks(plain_vec, ciphertext, c1);
+            ciphertext.retrieve_to_host();
 
-        ciphertext.retrieve_to_host();
+            ciphertext.save(ofs);
+        }
 
-//        auto time_end1 = std::chrono::high_resolution_clock::now();
-//        auto time_diff1 = std::chrono::duration_cast<std::chrono::microseconds >(time_end1 - time_start1);
-//        std::cout << "encrypt file end [" << time_diff1.count() << " microseconds]" << std::endl;
-//        std::cout << std::endl << std::endl;
-
-        ciphertext.save(ofs);
-//        std::cout << "encrypt end " << i << std::endl;  // TODO: remove @wangshuchao
+        ofs.close();
+        delete[] gallery_ptr;
     }
+//    std::ofstream ofs(encrypted_data_path, std::ios::binary);
+//
+//    std::cout << "Encode and encrypt start" << std::endl;
+//    auto time_start = std::chrono::high_resolution_clock::now();
+//
+//    sigma::Plaintext plain_vec;
+//    sigma::Ciphertext ciphertext;
+//    for (int i = 0; i < gallery_size; ++i) {
+//        auto vec = gallery_ptr + (i * slots);
+//
+//        auto time_start0 = std::chrono::high_resolution_clock::now();
+//
+//        encoder.encode_float(vec, slots, scale, plain_vec);
+//
+////        auto time_end0 = std::chrono::high_resolution_clock::now();
+////        auto time_diff0 = std::chrono::duration_cast<std::chrono::microseconds >(time_end0 - time_start0);
+////        std::cout << "encrypt file end [" << time_diff0.count() << " microseconds]" << std::endl;
+//
+////        auto time_start1 = std::chrono::high_resolution_clock::now();
+//
+//        ciphertext.use_half_data() = true;
+//        encryptor.encrypt_symmetric_ckks(plain_vec, ciphertext, c1);
+//
+//        ciphertext.retrieve_to_host();
+//
+////        auto time_end1 = std::chrono::high_resolution_clock::now();
+////        auto time_diff1 = std::chrono::duration_cast<std::chrono::microseconds >(time_end1 - time_start1);
+////        std::cout << "encrypt file end [" << time_diff1.count() << " microseconds]" << std::endl;
+////        std::cout << std::endl << std::endl;
+//
+//        ciphertext.save(ofs);
+////        std::cout << "encrypt end " << i << std::endl;  // TODO: remove @wangshuchao
+//    }
 
     auto time_end = std::chrono::high_resolution_clock::now();
     auto time_diff = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start);
@@ -99,9 +141,9 @@ int main() {
 
     c1.release_device_data();
 
-    ofs.close();
+//    ofs.close();
 
-    delete[] gallery_ptr;
+//    delete[] gallery_ptr;
 
     return 0;
 }
