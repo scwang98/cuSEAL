@@ -30,7 +30,8 @@ namespace util {
 
         safe_queue() = default;
 
-        safe_queue(const safe_queue &) = delete;
+        safe_queue(const safe_queue &queue) {
+        };
 
         safe_queue &operator=(const safe_queue &) = delete;
 

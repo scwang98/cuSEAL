@@ -41,7 +41,8 @@ int main() {
 //    auto gallery_ptr = util::read_formatted_npy_data(FILE_STORE_PATH + "gallery_x.npy", slots, customized_scale, gallery_size);
 
     std::vector<std::vector<int64_t>> indexes;
-    auto tuples = util::read_cluster_npy_data(FILE_STORE_PATH + "gallery_x.npy", slots, customized_scale, indexes);
+    std::vector<float> centroids;
+    auto tuples = util::read_cluster_npy_data(FILE_STORE_PATH + "gallery_x.npy", slots, customized_scale, centroids, indexes);
 
 
     sigma::KernelProvider::initialize();
@@ -73,12 +74,27 @@ int main() {
 
     c1.copy_to_device();
 
+    std::ofstream centroids_ofs("../data/gallery_data/gallery_indexes.dat");
+    centroids_ofs.write(reinterpret_cast<const char*>(centroids.data()), centroids.size() * sizeof(float));
+    centroids_ofs.close();
+
+    std::ofstream indexes_ofs("../data/gallery_data/gallery_indexes.dat");
+    auto indexes_size = indexes.size();
+    indexes_ofs.write(reinterpret_cast<const char*>(&indexes_size), sizeof(size_t));
+
     std::cout << "Encode and encrypt start" << std::endl;
     auto time_start = std::chrono::high_resolution_clock::now();
 
     for (uint idx = 0; idx < tuples.size(); idx++) {
-        auto gallery_ptr = std::get<0>(tuples[idx]);
-        auto gallery_size = std::get<1>(tuples[idx]);
+        auto &tuple = tuples[idx];
+        auto gallery_ptr = std::get<0>(tuple);
+        auto gallery_size = std::get<1>(tuple);
+        auto origin_size = std::get<2>(tuple);
+        auto index = indexes[idx];
+
+        auto dataSize = index.size();
+        indexes_ofs.write(reinterpret_cast<const char*>(&dataSize), sizeof(size_t));
+        indexes_ofs.write(reinterpret_cast<const char*>(index.data()), dataSize * sizeof(int64_t));
 
         auto path = gallery_data_path(idx);
         std::ofstream ofs(path, std::ios::binary);
@@ -142,6 +158,7 @@ int main() {
     c1.release_device_data();
 
 //    ofs.close();
+    indexes_ofs.close();
 
 //    delete[] gallery_ptr;
 

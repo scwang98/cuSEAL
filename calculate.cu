@@ -1,14 +1,19 @@
 
 #include <iostream>
 #include <fstream>
+#include <utility>
 #include <vector>
+#include <unordered_set>
 #include <sigma.h>
+#include <iomanip>
 
 #include "extern/jsoncpp/json/json.h"
 #include "util/configmanager.h"
 #include "util/vectorutil.h"
 #include "util/keyutil.h"
+#include "util/safequeue.h"
 
+using namespace std;
 
 #define CUDA_TIME_START cudaEvent_t start, stop;\
                         cudaEventCreate(&start);\
@@ -23,19 +28,74 @@
                        std::cout << "Time = " << elapsed_time << " ms." << std::endl;
 
 #define DIMENSION 512
-#define THREAD_SIZE 3
-#define PROBE_SIZE 1000
+#define THREAD_SIZE 8
+#define PROBE_SIZE 10
 
 const std::string encrypted_data_path = "../data/gallery.dat";
 const std::string encrypted_c1_data_path = "../data/encrypted_c1.dat";
 const static std::string FILE_STORE_PATH = "../vectors/";
 
+std::string gallery_data_path(size_t index) {
+    std::ostringstream oss;
+    oss << std::setw(5) << std::setfill('0') << index;
+    return "../data/gallery_data/gallery_" + oss.str() + "_results.dat";
+}
+
 std::string ip_results_path(size_t index) {
     return "../data/ip_results/probe_" + std::to_string(index) + "_results.dat";
 }
 
+class Task {
+
+    std::vector<float> probe_data;
+
+public:
+
+    size_t finished_part;
+
+    Task() = default;
+
+    Task(const std::vector<float>& data) : probe_data(data) {
+        finished_part = 0;
+    }
+};
+
+class TaskManager {
+    int gpu_count;
+    unordered_set<Task *> set;
+
+public:
+    vector<util::safe_queue<Task *, 20>> queues;
+
+    TaskManager(int gpu_count) : gpu_count(gpu_count) {
+        queues.resize(4);
+    }
+
+    void start_task(const std::vector<float>& data) {
+        auto task = new Task(data);
+        set.insert(task);
+        for (uint i = 0; i < gpu_count; i++) {
+            queues[i].push(task);
+        }
+    }
+
+    void task_finished(Task *task) {
+        task->finished_part++;
+        if (task->finished_part >= gpu_count) {
+            // TODO: 数据存储
+
+            set.erase(task);
+            delete task;
+        }
+    }
+};
+
 std::vector<sigma::Ciphertext> gallery_data;
+vector<vector<vector<sigma::Ciphertext>>> gallery_data_cluster;
+std::vector<std::vector<int64_t>> indexes;
 std::vector<std::vector<float>> probe_data;
+
+vector<util::safe_queue<Task *, 20>> queues;
 
 size_t probe_index = 0;
 std::mutex probe_index_mutex;
@@ -107,7 +167,49 @@ void calculate(sigma::SIGMAContext &context, const sigma::Ciphertext &c1, double
     }
 }
 
+void task_for_gpu(int gpu_index, sigma::SIGMAContext &context, const sigma::Ciphertext &origin_c1, double scale) {
+    cudaSetDevice(gpu_index);
+    auto &gallery_data = gallery_data_cluster[gpu_index];
+    for (auto &cluster_data : gallery_data) {
+        for (auto &ciphertext : cluster_data) {
+            ciphertext.copy_to_device();
+        }
+    }
+
+    sigma::Ciphertext c1 = origin_c1;
+    c1.copy_to_device();
+
+    std::thread *threads[THREAD_SIZE];
+    for (auto &ptr: threads) {
+        ptr = new std::thread(calculate, std::ref(context), std::ref(c1), std::ref(scale));
+    }
+
+    for (auto &ptr: threads) {
+        if (ptr->joinable()) {
+            ptr->join();
+        }
+        delete ptr;
+    }
+}
+
 int main() {
+
+    int gpu_count = 0;
+    cudaGetDeviceCount(&gpu_count);
+
+    std::ifstream indexes_ifs("../data/gallery_data/gallery_indexes.dat", std::ios::binary);
+    size_t cluster_size = 0;
+    indexes_ifs.read(reinterpret_cast<char*>(&cluster_size), sizeof(size_t));
+
+    std::ifstream centroids_ifs("../data/gallery_data/gallery_indexes.dat");
+    std::vector<float> centroids(cluster_size * DIMENSION);
+    indexes_ifs.read(reinterpret_cast<char*>(centroids.data()), cluster_size * DIMENSION * sizeof(float));
+    centroids_ifs.close();
+
+    size_t cluster_per_gpu = cluster_size / gpu_count;
+    if (cluster_size % gpu_count != 0) {
+        cluster_per_gpu++;
+    }
 
     size_t poly_modulus_degree = ConfigUtil.int64ValueForKey("poly_modulus_degree");
     size_t scale_power = ConfigUtil.int64ValueForKey("scale_power");
@@ -128,37 +230,47 @@ int main() {
     c1.load(context, c1_ifs);
     c1_ifs.close();
 
-    std::ifstream gifs(encrypted_data_path, std::ios::binary);
-    while (!gifs.eof()) {
-        sigma::Ciphertext encrypted_vec;
-        encrypted_vec.use_half_data() = true;
-        try {
-            encrypted_vec.load(context, gifs);
-            gallery_data.push_back(encrypted_vec);
-            gallery_data.back().copy_to_device();
-        } catch (const std::exception &e) {
-            break;
+    gallery_data_cluster.resize(gpu_count);
+    for (uint gpu_index = 0; gpu_index < gpu_count - 1; gpu_index++) {
+        gallery_data_cluster[gpu_index].resize(cluster_per_gpu);
+    }
+    gallery_data_cluster[gpu_count - 1].resize(cluster_size - (cluster_per_gpu * (gpu_count - 1)));
+    indexes.resize(cluster_size);
+    for (uint cluster_idx = 0; cluster_idx < cluster_size; cluster_idx++) {
+        size_t indexes_size = 0;
+        indexes_ifs.read(reinterpret_cast<char*>(&indexes_size), sizeof(size_t));
+        indexes[cluster_idx].resize(indexes_size);
+        indexes_ifs.read(reinterpret_cast<char*>(centroids.data()), indexes_size * sizeof(int64_t));
+
+        auto gpu_idx = cluster_idx / cluster_per_gpu;
+        auto idx = cluster_idx % cluster_per_gpu;
+
+        std::ifstream cluster_ifs(gallery_data_path(cluster_idx), std::ios::binary);
+        auto &cluster = gallery_data_cluster[gpu_idx][idx];
+        cluster.resize(indexes_size);
+        for (auto &ciphertext : cluster) {
+            ciphertext.use_half_data() = true;
+            ciphertext.load(context, cluster_ifs);
         }
     }
-    gifs.close();
 
     probe_data = util::read_npy_data(FILE_STORE_PATH + "probe_x.npy");
 
     TIMER_START;
 
-    c1.copy_to_device();
-
-    std::thread *threads[THREAD_SIZE];
-    for (auto &ptr: threads) {
-        ptr = new std::thread(calculate, std::ref(context), std::ref(c1), std::ref(scale));
-    }
-
-    for (auto &ptr: threads) {
-        if (ptr->joinable()) {
-            ptr->join();
-        }
-        delete ptr;
-    }
+//    c1.copy_to_device();
+//
+//    std::thread *threads[THREAD_SIZE];
+//    for (auto &ptr: threads) {
+//        ptr = new std::thread(calculate, std::ref(context), std::ref(c1), std::ref(scale));
+//    }
+//
+//    for (auto &ptr: threads) {
+//        if (ptr->joinable()) {
+//            ptr->join();
+//        }
+//        delete ptr;
+//    }
 
     gallery_data.clear();
     probe_data.clear();
