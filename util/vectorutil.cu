@@ -145,7 +145,7 @@ namespace util {
 
 
     std::vector<std::tuple<float *, size_t, size_t>>
-    read_cluster_npy_data(const std::string &npy_name, size_t slots, float scale, std::vector<std::vector<int64_t>> &indexes) {
+    read_cluster_npy_data(const std::string &npy_name, size_t slots, float scale, std::vector<float> &centroids, std::vector<std::vector<int64_t>> &indexes) {
         cnpy::NpyArray arr = cnpy::npy_load(npy_name);
         std::vector<size_t> shape = arr.shape;
         size_t single_size = shape[1];
@@ -157,7 +157,7 @@ namespace util {
 
         std::vector<std::vector<float>> cluster(centroids_size);
         indexes.resize(centroids_size);
-        std::vector<float> centroids(centroids_size * single_size);
+        centroids.resize(centroids_size * single_size);
         kmeans_clustering(single_size, data, shape[0], cluster, indexes, centroids, centroids_size);
 
         std::vector<std::tuple<float *, size_t, size_t>> formatted_cluster;

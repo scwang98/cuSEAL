@@ -17,6 +17,10 @@ add_subdirectory(SIGMA)
 add_subdirectory(extern/cnpy)
 add_subdirectory(extern/jsoncpp)
 
+set(FAISS_ENABLE_GPU OFF)
+set(FAISS_ENABLE_PYTHON OFF)
+add_subdirectory(extern/faiss)
+
 
 set(CUSEAL_UTIL_FILES "")
 add_subdirectory(util)
@@ -40,6 +44,7 @@ target_link_libraries(keygen PRIVATE SIGMA::sigma)
 target_link_libraries(keygen PRIVATE cnpy)
 target_link_libraries(keygen PRIVATE jsoncpp)
 target_link_libraries(keygen PRIVATE -lcurand)
+target_link_libraries(keygen PRIVATE faiss)
 
 
 add_executable(encrypt
@@ -50,6 +55,7 @@ target_link_libraries(encrypt PRIVATE SIGMA::sigma)
 target_link_libraries(encrypt PRIVATE cnpy)
 target_link_libraries(encrypt PRIVATE jsoncpp)
 target_link_libraries(encrypt PRIVATE -lcurand)
+target_link_libraries(encrypt PRIVATE faiss)
 
 
 add_executable(calculate
@@ -60,6 +66,8 @@ target_link_libraries(calculate PRIVATE SIGMA::sigma)
 target_link_libraries(calculate PRIVATE cnpy)
 target_link_libraries(calculate PRIVATE jsoncpp)
 target_link_libraries(calculate PRIVATE -lcurand)
+target_link_libraries(calculate PRIVATE faiss)
+
 
 add_executable(decrypt
         decrypt.cpp
@@ -69,3 +77,4 @@ target_link_libraries(decrypt PRIVATE SIGMA::sigma)
 target_link_libraries(decrypt PRIVATE cnpy)
 target_link_libraries(decrypt PRIVATE jsoncpp)
 target_link_libraries(decrypt PRIVATE -lcurand)
+target_link_libraries(decrypt PRIVATE faiss)

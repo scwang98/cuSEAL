@@ -10,6 +10,8 @@ set(CUSEAL_UTIL_FILES ${CUSEAL_UTIL_FILES}
         ${CMAKE_CURRENT_LIST_DIR}/keyutil.h
         ${CMAKE_CURRENT_LIST_DIR}/keyutil.cpp
         ${CMAKE_CURRENT_LIST_DIR}/safequeue.h
+        ${CMAKE_CURRENT_LIST_DIR}/clustering.h
+        ${CMAKE_CURRENT_LIST_DIR}/clustering.cpp
 )
 
 set(CUSEAL_UTIL_FILES ${CUSEAL_UTIL_FILES} PARENT_SCOPE)
