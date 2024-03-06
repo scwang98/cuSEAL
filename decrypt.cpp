@@ -1,4 +1,8 @@
+//
+// Created by scwang on 2024/3/6.
+//
 
+#include "decrypt.h"
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -9,10 +13,6 @@
 #include "util/configmanager.h"
 #include "util/vectorutil.h"
 #include "util/keyutil.h"
-
-const std::string secret_key_data_path = "../data/secret_key.dat";
-const std::string encrypted_c1_data_path = "../data/ip_results/encrypted_c1.dat";
-const std::string results_data_path = "../data/ip_results/top_ip_results.json";
 
 std::string ip_results_path(size_t index) {
     return "../data/ip_results/probe_" + std::to_string(index) + "_results.dat";
@@ -52,9 +52,7 @@ public:
 
 };
 
-int main() {
-
-    TIMER_START;
+int decrypt(const std::string &secret_key_path, const std::string &results_path) {
 
     size_t poly_modulus_degree = ConfigUtil.int64ValueForKey("poly_modulus_degree");
     size_t scale_power = ConfigUtil.int64ValueForKey("scale_power");
@@ -73,13 +71,11 @@ int main() {
     sigma::CKKSEncoder encoder(context);
 
     sigma::SecretKey secret_key;
-    util::load_secret_key(context, secret_key, secret_key_data_path);
+    util::load_secret_key(context, secret_key, secret_key_path);
     sigma::Decryptor decryptor(context, secret_key);
 
     size_t customized_scale_power = ConfigUtil.int64ValueForKey("customized_scale_power");
     double customized_scale = pow(2.0, customized_scale_power);
-
-//    std::ifstream c1_ifs(encrypted_c1_data_path, std::ios::binary);
 
     Json::Value root;
     for (size_t i = 0;; i++) {
@@ -123,7 +119,7 @@ int main() {
         root.append(ips);
     }
 
-    std::ofstream outputFile(results_data_path);
+    std::ofstream outputFile(results_path);
     if (outputFile.is_open()) {
         Json::StreamWriterBuilder writerBuilder;
         writerBuilder["indentation"] = "    ";
@@ -134,8 +130,6 @@ int main() {
     } else {
         std::cerr << "Unable to open file for writing." << std::endl;
     }
-
-    TIMER_PRINT_NOW(Decrypt_and_decode);
 
     return 0;
 }

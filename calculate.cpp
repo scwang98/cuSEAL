@@ -1,4 +1,8 @@
+//
+// Created by scwang on 2024/3/6.
+//
 
+#include "calculate.h"
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -9,29 +13,12 @@
 #include "util/vectorutil.h"
 #include "util/keyutil.h"
 
-
-#define CUDA_TIME_START cudaEvent_t start, stop;\
-                        cudaEventCreate(&start);\
-                        cudaEventCreate(&stop);\
-                        cudaEventRecord(start);\
-                        cudaEventQuery(start);
-
-#define CUDA_TIME_STOP cudaEventRecord(stop);\
-                       cudaEventSynchronize(stop);\
-                       float elapsed_time;\
-                       cudaEventElapsedTime(&elapsed_time, start, stop);\
-                       std::cout << "Time = " << elapsed_time << " ms." << std::endl;
-
 #define DIMENSION 512
 #define THREAD_SIZE 3
 #define PROBE_SIZE 1000
 
-const std::string encrypted_data_path = "../data/gallery.dat";
-const std::string encrypted_c1_data_path = "../data/encrypted_c1.dat";
-const static std::string FILE_STORE_PATH = "../vectors/";
-
-std::string ip_results_path(size_t index) {
-    return "../data/ip_results/probe_" + std::to_string(index) + "_results.dat";
+std::string ip_results_path(const std::string &directory, size_t index) {
+    return directory + "/probe_" + std::to_string(index) + "_results.dat";
 }
 
 std::vector<sigma::Ciphertext> gallery_data;
@@ -40,7 +27,7 @@ std::vector<std::vector<float>> probe_data;
 size_t probe_index = 0;
 std::mutex probe_index_mutex;
 
-void calculate(sigma::SIGMAContext &context, const sigma::Ciphertext &c1, double scale) {
+void calculate_thread(sigma::SIGMAContext &context, const sigma::Ciphertext &c1, double scale, const std::string &result_directory) {
     sigma::CKKSEncoder encoder(context);
     sigma::Evaluator evaluator(context);
 
@@ -63,9 +50,7 @@ void calculate(sigma::SIGMAContext &context, const sigma::Ciphertext &c1, double
 
         const auto &probe = probe_data[index];
         // 0.022
-//        CUDA_TIME_START
         encoder.cu_encode(probe[0], scale, encoded_probes[0]);
-//        CUDA_TIME_STOP
 
         // 0.008
         evaluator.cu_multiply_plain(c1, encoded_probes[0], c1_sum);
@@ -82,7 +67,7 @@ void calculate(sigma::SIGMAContext &context, const sigma::Ciphertext &c1, double
         // 0.036
         c1_sum.retrieve_to_host();
 
-        std::ofstream ofs(ip_results_path(index), std::ios::binary);
+        std::ofstream ofs(ip_results_path(result_directory, index), std::ios::binary);
         // 0.07
         c1_sum.save(ofs);
 
@@ -107,7 +92,7 @@ void calculate(sigma::SIGMAContext &context, const sigma::Ciphertext &c1, double
     }
 }
 
-int main() {
+void calculate(const std::string &probe_path, const std::string &encrypted_directory, const std::string &result_directory) {
 
     size_t poly_modulus_degree = ConfigUtil.int64ValueForKey("poly_modulus_degree");
     size_t scale_power = ConfigUtil.int64ValueForKey("scale_power");
@@ -121,6 +106,11 @@ int main() {
     params.set_coeff_modulus(sigma::CoeffModulus::Create(poly_modulus_degree, modulus_bit_sizes));
     sigma::SIGMAContext context(params);
 
+    std::string encrypted_c1_data_path = encrypted_directory;
+    if (encrypted_directory.back() != '/') {
+        encrypted_c1_data_path += "/";
+    }
+    encrypted_c1_data_path += "encrypted_c1.dat";
     std::ifstream c1_ifs(encrypted_c1_data_path, std::ios::binary);
     sigma::Ciphertext c1;
     c1.use_half_data() = true;
@@ -128,6 +118,11 @@ int main() {
     c1.load(context, c1_ifs);
     c1_ifs.close();
 
+    std::string encrypted_data_path = encrypted_directory;
+    if (encrypted_directory.back() != '/') {
+        encrypted_data_path += "/";
+    }
+    encrypted_data_path += "gallery.dat";
     std::ifstream gifs(encrypted_data_path, std::ios::binary);
     while (!gifs.eof()) {
         sigma::Ciphertext encrypted_vec;
@@ -142,15 +137,13 @@ int main() {
     }
     gifs.close();
 
-    probe_data = util::read_npy_data(FILE_STORE_PATH + "probe_x.npy");
-
-    TIMER_START;
+    probe_data = util::read_npy_data(probe_path);
 
     c1.copy_to_device();
 
     std::thread *threads[THREAD_SIZE];
     for (auto &ptr: threads) {
-        ptr = new std::thread(calculate, std::ref(context), std::ref(c1), std::ref(scale));
+        ptr = new std::thread(calculate_thread, std::ref(context), std::ref(c1), std::ref(scale), std::ref(result_directory));
     }
 
     for (auto &ptr: threads) {
@@ -163,7 +156,4 @@ int main() {
     gallery_data.clear();
     probe_data.clear();
 
-    TIMER_PRINT_NOW(Calculate_inner_product);
-
-    return 0;
 }

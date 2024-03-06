@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include "batchencoder.h"
 #include "ciphertext.h"
 #include "ckks.cuh"
 #include "context.h"

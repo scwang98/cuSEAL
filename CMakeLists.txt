@@ -33,6 +33,8 @@ target_link_libraries(cuSEAL PRIVATE jsoncpp)
 
 
 add_executable(keygen
+        example/keygen.cpp
+        keygen.h
         keygen.cpp
         ${CUSEAL_UTIL_FILES}
 )
@@ -43,7 +45,9 @@ target_link_libraries(keygen PRIVATE -lcurand)
 
 
 add_executable(encrypt
-        encrypt.cu
+        example/encrypt.cu
+        encrypt.h
+        encrypt.cpp
         ${CUSEAL_UTIL_FILES}
 )
 target_link_libraries(encrypt PRIVATE SIGMA::sigma)
@@ -53,7 +57,9 @@ target_link_libraries(encrypt PRIVATE -lcurand)
 
 
 add_executable(calculate
-        calculate.cu
+        example/calculate.cu
+        calculate.h
+        calculate.cpp
         ${CUSEAL_UTIL_FILES}
 )
 target_link_libraries(calculate PRIVATE SIGMA::sigma)
@@ -62,6 +68,8 @@ target_link_libraries(calculate PRIVATE jsoncpp)
 target_link_libraries(calculate PRIVATE -lcurand)
 
 add_executable(decrypt
+        example/decrypt.cpp
+        decrypt.h
         decrypt.cpp
         ${CUSEAL_UTIL_FILES}
 )
