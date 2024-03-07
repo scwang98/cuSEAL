@@ -3,7 +3,6 @@
 
 # Source files in this directory
 set(SIGMA_SOURCE_FILES ${SIGMA_SOURCE_FILES}
-        ${CMAKE_CURRENT_LIST_DIR}/batchencoder.cpp
         ${CMAKE_CURRENT_LIST_DIR}/ciphertext.cpp
         ${CMAKE_CURRENT_LIST_DIR}/ckks.cu
         ${CMAKE_CURRENT_LIST_DIR}/context.cpp
@@ -26,7 +25,6 @@ set(SIGMA_SOURCE_FILES ${SIGMA_SOURCE_FILES}
 # Add header files for installation
 install(
         FILES
-        ${CMAKE_CURRENT_LIST_DIR}/batchencoder.h
         ${CMAKE_CURRENT_LIST_DIR}/ciphertext.h
         ${CMAKE_CURRENT_LIST_DIR}/ckks.cuh
         ${CMAKE_CURRENT_LIST_DIR}/modulus.h

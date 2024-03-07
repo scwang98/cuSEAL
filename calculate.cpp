@@ -1,4 +1,8 @@
+//
+// Created by scwang on 2024/3/6.
+//
 
+#include "calculate.h"
 #include <iostream>
 #include <fstream>
 #include <utility>
@@ -15,34 +19,18 @@
 
 using namespace std;
 
-#define CUDA_TIME_START cudaEvent_t start, stop;\
-                        cudaEventCreate(&start);\
-                        cudaEventCreate(&stop);\
-                        cudaEventRecord(start);\
-                        cudaEventQuery(start);
-
-#define CUDA_TIME_STOP cudaEventRecord(stop);\
-                       cudaEventSynchronize(stop);\
-                       float elapsed_time;\
-                       cudaEventElapsedTime(&elapsed_time, start, stop);\
-                       std::cout << "Time = " << elapsed_time << " ms." << std::endl;
-
 #define DIMENSION 512
 #define THREAD_SIZE 8
 #define PROBE_SIZE 10
 
-const std::string encrypted_data_path = "../data/gallery.dat";
-const std::string encrypted_c1_data_path = "../data/encrypted_c1.dat";
-const static std::string FILE_STORE_PATH = "../vectors/";
-
-std::string gallery_data_path(size_t index) {
+std::string gallery_data_path(const std::string &directory, size_t index) {
     std::ostringstream oss;
     oss << std::setw(5) << std::setfill('0') << index;
-    return "../data/gallery_data/gallery_" + oss.str() + "_results.dat";
+    return directory + "/gallery_data/gallery_" + oss.str() + "_results.dat";
 }
 
-std::string ip_results_path(size_t index) {
-    return "../data/ip_results/probe_" + std::to_string(index) + "_results.dat";
+std::string ip_results_path(const std::string &directory, size_t index) {
+    return directory + "/probe_" + std::to_string(index) + "_results.dat";
 }
 
 class Task {
@@ -100,7 +88,7 @@ vector<util::safe_queue<Task *, 20>> queues;
 size_t probe_index = 0;
 std::mutex probe_index_mutex;
 
-void calculate(sigma::SIGMAContext &context, const sigma::Ciphertext &c1, double scale) {
+void calculate_thread(sigma::SIGMAContext &context, const sigma::Ciphertext &c1, double scale, const std::string &result_directory) {
     sigma::CKKSEncoder encoder(context);
     sigma::Evaluator evaluator(context);
 
@@ -123,9 +111,7 @@ void calculate(sigma::SIGMAContext &context, const sigma::Ciphertext &c1, double
 
         const auto &probe = probe_data[index];
         // 0.022
-//        CUDA_TIME_START
         encoder.cu_encode(probe[0], scale, encoded_probes[0]);
-//        CUDA_TIME_STOP
 
         // 0.008
         evaluator.cu_multiply_plain(c1, encoded_probes[0], c1_sum);
@@ -142,7 +128,7 @@ void calculate(sigma::SIGMAContext &context, const sigma::Ciphertext &c1, double
         // 0.036
         c1_sum.retrieve_to_host();
 
-        std::ofstream ofs(ip_results_path(index), std::ios::binary);
+        std::ofstream ofs(ip_results_path(result_directory, index), std::ios::binary);
         // 0.07
         c1_sum.save(ofs);
 
@@ -192,7 +178,7 @@ void task_for_gpu(int gpu_index, sigma::SIGMAContext &context, const sigma::Ciph
     }
 }
 
-int main() {
+void calculate(const std::string &probe_path, const std::string &encrypted_directory, const std::string &result_directory) {
 
     int gpu_count = 0;
     cudaGetDeviceCount(&gpu_count);
@@ -223,6 +209,11 @@ int main() {
     params.set_coeff_modulus(sigma::CoeffModulus::Create(poly_modulus_degree, modulus_bit_sizes));
     sigma::SIGMAContext context(params);
 
+    std::string encrypted_c1_data_path = encrypted_directory;
+    if (encrypted_directory.back() != '/') {
+        encrypted_c1_data_path += "/";
+    }
+    encrypted_c1_data_path += "encrypted_c1.dat";
     std::ifstream c1_ifs(encrypted_c1_data_path, std::ios::binary);
     sigma::Ciphertext c1;
     c1.use_half_data() = true;
@@ -245,7 +236,7 @@ int main() {
         auto gpu_idx = cluster_idx / cluster_per_gpu;
         auto idx = cluster_idx % cluster_per_gpu;
 
-        std::ifstream cluster_ifs(gallery_data_path(cluster_idx), std::ios::binary);
+        std::ifstream cluster_ifs(gallery_data_path(encrypted_directory, cluster_idx), std::ios::binary);
         auto &cluster = gallery_data_cluster[gpu_idx][idx];
         cluster.resize(indexes_size);
         for (auto &ciphertext : cluster) {
@@ -254,9 +245,8 @@ int main() {
         }
     }
 
-    probe_data = util::read_npy_data(FILE_STORE_PATH + "probe_x.npy");
+    probe_data = util::read_npy_data(probe_path);
 
-    TIMER_START;
 
 //    c1.copy_to_device();
 //
@@ -275,7 +265,4 @@ int main() {
     gallery_data.clear();
     probe_data.clear();
 
-    TIMER_PRINT_NOW(Calculate_inner_product);
-
-    return 0;
 }
