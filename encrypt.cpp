@@ -97,6 +97,8 @@ encrypt(const std::string &secret_key_path, const std::string &gallery_path, con
         auto path = gallery_data_path(idx);
         std::ofstream ofs(path, std::ios::binary);
 
+        ofs.write(reinterpret_cast<const char *>(&gallery_size), sizeof(size_t));
+
         sigma::Plaintext plain_vec;
         sigma::Ciphertext ciphertext;
         for (int i = 0; i < gallery_size; ++i) {
