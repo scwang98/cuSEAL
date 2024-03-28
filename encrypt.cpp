@@ -72,7 +72,7 @@ encrypt(const std::string &secret_key_path, const std::string &gallery_path, con
 
     c1.copy_to_device();
 
-    std::ofstream centroids_ofs(encrypted_directory + "/gallery_data/gallery_indexes.dat");
+    std::ofstream centroids_ofs(encrypted_directory + "/gallery_data/gallery_centroids.dat");
     centroids_ofs.write(reinterpret_cast<const char *>(centroids.data()), centroids.size() * sizeof(float));
     centroids_ofs.close();
 
@@ -90,7 +90,7 @@ encrypt(const std::string &secret_key_path, const std::string &gallery_path, con
         auto origin_size = std::get<2>(tuple);
         auto index = indexes[idx];
 
-        auto dataSize = index.size();
+        size_t dataSize = index.size();
         indexes_ofs.write(reinterpret_cast<const char *>(&dataSize), sizeof(size_t));
         indexes_ofs.write(reinterpret_cast<const char *>(index.data()), dataSize * sizeof(int64_t));
 

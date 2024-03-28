@@ -50,7 +50,7 @@ target_link_libraries(keygen PRIVATE faiss)
 
 
 add_executable(encrypt
-        example/encrypt.cu
+        example/example_encrypt.cpp
         encrypt.h
         encrypt.cpp
         ${CUSEAL_UTIL_FILES}
@@ -63,9 +63,9 @@ target_link_libraries(encrypt PRIVATE faiss)
 
 
 add_executable(calculate
-        example/calculate.cu
+        example/example_calculate.cpp
         calculate.h
-        calculate.cpp
+        calculate.cu
         ${CUSEAL_UTIL_FILES}
 )
 target_link_libraries(calculate PRIVATE SIGMA::sigma)

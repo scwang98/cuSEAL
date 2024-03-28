@@ -768,6 +768,21 @@ namespace sigma
             use_half_data_ = copy.use_half_data_;
         }
 
+        inline void copy_from(const Ciphertext &copy, bool copy_device) {
+            parms_id_ = copy.parms_id_;
+            is_ntt_form_ = copy.is_ntt_form_;
+            size_ = copy.size_;
+            poly_modulus_degree_ = copy.poly_modulus_degree_;
+            coeff_modulus_size_ = copy.coeff_modulus_size_;
+            scale_ = copy.scale_;
+            correction_factor_ = copy.correction_factor_;
+            data_ = copy.data_;
+            use_half_data_ = copy.use_half_data_;
+            if (copy_device) {
+                device_data_.set_host_data(copy.data_.begin(), copy.data_.size());
+            }
+        }
+
         inline void copy_device_from_host(const Ciphertext &copy) {
             parms_id_ = copy.parms_id_;
             is_ntt_form_ = copy.is_ntt_form_;

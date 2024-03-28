@@ -2,9 +2,7 @@
 // Created by scwang on 2023/12/26.
 //
 
-#ifndef CUSEAL_SAFEQUEUE_H
-#define CUSEAL_SAFEQUEUE_H
-
+#pragma once
 
 #include <queue>
 #include <mutex>
@@ -81,6 +79,3 @@ namespace util {
         }
     };
 }
-
-
-#endif //CUSEAL_SAFEQUEUE_H
