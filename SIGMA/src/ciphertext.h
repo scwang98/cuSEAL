@@ -146,7 +146,8 @@ namespace sigma
                                                                scale_(copy.scale_),
                                                                correction_factor_(copy.correction_factor_),
                                                                data_(copy.data_),
-                                                               use_half_data_(copy.use_half_data_) {
+                                                               use_half_data_(copy.use_half_data_),
+                                                               data_type_(copy.data_type_) {
             if (copy_device) {
                 device_data_.copy_device_data(copy.device_data_.get(), copy.device_data_.size());
             }
@@ -766,6 +767,7 @@ namespace sigma
             scale_ = copy.scale_;
             correction_factor_ = copy.correction_factor_;
             use_half_data_ = copy.use_half_data_;
+            data_type_ = copy.data_type_;
         }
 
         inline void copy_from(const Ciphertext &copy, bool copy_device) {
@@ -778,6 +780,7 @@ namespace sigma
             correction_factor_ = copy.correction_factor_;
             data_ = copy.data_;
             use_half_data_ = copy.use_half_data_;
+            data_type_ = copy.data_type_;
             if (copy_device) {
                 device_data_.set_host_data(copy.data_.begin(), copy.data_.size());
             }
@@ -793,6 +796,7 @@ namespace sigma
             correction_factor_ = copy.correction_factor_;
             data_ = copy.data_;
             use_half_data_ = copy.use_half_data_;
+            data_type_ = copy.data_type_;
             device_data_.set_host_data(copy.data_.begin(), copy.data_.size());
         }
 

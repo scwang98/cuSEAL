@@ -20,7 +20,7 @@
 using namespace std;
 
 #define DIMENSION 512
-#define THREAD_SIZE 8
+#define THREAD_SIZE 1
 #define PROBE_SIZE 10
 
 std::string gallery_data_path(const std::string &directory, size_t index) {
@@ -76,6 +76,7 @@ public:
     Task(const std::vector<float>& data, std::vector<size_t> &indexes, int gpu_count, int probe_index) : probe_data(data), indexes(indexes), probe_index(probe_index) {
         finished_part = 0;
         results.resize(gpu_count);
+        cluster_indexes.resize(gpu_count);
     }
 
 };
@@ -177,7 +178,6 @@ void calculate_thread(int gpu_index, int gpu_count, int cluster_per_gpu, sigma::
         const auto &probe = task->probe_data;
 
         if (probe.empty()) {
-            // TODO: stop
             task_manager->task_finished(task);
             break;
         }
@@ -230,9 +230,8 @@ void calculate_thread(int gpu_index, int gpu_count, int cluster_per_gpu, sigma::
 void task_for_gpu(int gpu_index, int gpu_count, int cluster_per_gpu, sigma::SIGMAContext &context, const sigma::Ciphertext &origin_c1, double scale) {
     cudaSetDevice(gpu_index);
     auto &gallery_data = gallery_data_cluster[gpu_index];
-    for (auto &cluster_data : gallery_data) {
-        cout << cluster_data.size() << endl;
-        cout << "wsccccc" << endl;
+    for (int i = 0; i < gallery_data.size(); i++) {
+        auto &cluster_data = gallery_data[i];
         for (auto &ciphertext : cluster_data) {
             ciphertext.copy_to_device();
         }
@@ -249,6 +248,13 @@ void task_for_gpu(int gpu_index, int gpu_count, int cluster_per_gpu, sigma::SIGM
     for (auto &thread: threads) {
         if (thread.joinable()) {
             thread.join();
+        }
+    }
+
+    for (int i = 0; i < gallery_data.size(); i++) {
+        auto &cluster_data = gallery_data[i];
+        for (auto &ciphertext : cluster_data) {
+            ciphertext.release_device_data();
         }
     }
 }
@@ -354,6 +360,7 @@ void calculate(const std::string &probe_path, const std::string &encrypted_direc
     thread save_thread_ptr(save_thread, std::ref(result_directory));
 
     probe_data = util::read_npy_data(probe_path);
+    probe_data = vector(probe_data.begin(), probe_data.begin() + 1000);
 
 
     for (int i = 0; i < probe_data.size(); i++) {
