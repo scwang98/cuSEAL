@@ -20,7 +20,7 @@
 using namespace std;
 
 #define DIMENSION 512
-#define THREAD_SIZE 1
+#define THREAD_SIZE 2
 #define PROBE_SIZE 10
 
 std::string gallery_data_path(const std::string &directory, size_t index) {
@@ -138,7 +138,9 @@ public:
     void probe_finished() {
         auto task = new Task();
         for (uint i = 0; i < gpu_count; i++) {
-            queues[i].push(task);
+            for (uint j = 0; j < THREAD_SIZE; j++) {
+                queues[i].push(task);
+            }
         }
     }
 
@@ -156,7 +158,7 @@ TaskManager *task_manager;
 void calculate_thread(int gpu_index, int gpu_count, int cluster_per_gpu, sigma::SIGMAContext &context, const sigma::Ciphertext &c1, double scale) {
     cudaSetDevice(gpu_index);
 
-    auto gpu_gallery_data = gallery_data_cluster[gpu_index];
+    auto &gpu_gallery_data = gallery_data_cluster[gpu_index];
 
     const uint cluster_index_start = cluster_per_gpu * gpu_index;
     const uint cluster_index_end = cluster_index_start + gpu_gallery_data.size();
@@ -208,7 +210,7 @@ void calculate_thread(int gpu_index, int gpu_count, int cluster_per_gpu, sigma::
 
         for (int cluster_index = 0; cluster_index < filtered_indexes.size(); cluster_index++) {
             auto index = filtered_indexes[cluster_index];
-            auto gallery_data = gpu_gallery_data[index];
+            auto &gallery_data = gpu_gallery_data[index];
             for (size_t offset = 0; offset < gallery_data.size(); offset += DIMENSION) {
 
                 evaluator.cu_multiply_plain(gallery_data[offset], encoded_probes[0], result);
@@ -267,7 +269,11 @@ void save_thread(const std::string &result_directory) {
             continue;
         }
         if (task->probe_data.empty()) {
-            break;
+            if (task->finished_part < task_manager->gpu_count * THREAD_SIZE) {
+                continue;
+            } else {
+                break;
+            }
         }
 
         std::ofstream ofs(ip_results_path(result_directory, task->probe_index), std::ios::binary);
@@ -359,8 +365,12 @@ void calculate(const std::string &probe_path, const std::string &encrypted_direc
 
     thread save_thread_ptr(save_thread, std::ref(result_directory));
 
-    probe_data = util::read_npy_data(probe_path);
-    probe_data = vector(probe_data.begin(), probe_data.begin() + 1000);
+//    probe_data = util::read_npy_data(probe_path);
+    auto temp = util::read_npy_data(probe_path);
+    for (int i = 0; i < 10000; i++) {
+        probe_data.push_back(temp[i]);
+    }
+    temp.clear();
 
 
     for (int i = 0; i < probe_data.size(); i++) {
