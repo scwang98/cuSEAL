@@ -34,14 +34,15 @@ std::string ip_results_path(const std::string &directory, size_t index) {
 }
 
 void save_results(vector<vector<vector<sigma::Ciphertext>>> &results, std::ofstream &ofs) {
-    size_t size1 = results.size();
+    size_t size1 = 0;
+    for (auto &result : results) {
+        size1 += result.size();
+    }
     ofs.write(reinterpret_cast<const char *>(&size1), sizeof(size_t));
     for (auto &result : results) {
-        size_t size2 = result.size();
-        ofs.write(reinterpret_cast<const char *>(&size2), sizeof(size_t));
         for (auto &result1: result) {
-            size_t size3 = result1.size();
-            ofs.write(reinterpret_cast<const char *>(&size3), sizeof(size_t));
+            size_t size2 = result1.size();
+            ofs.write(reinterpret_cast<const char *>(&size2), sizeof(size_t));
             for (auto &result2: result1) {
                 result2.save(ofs);
             }
@@ -50,12 +51,13 @@ void save_results(vector<vector<vector<sigma::Ciphertext>>> &results, std::ofstr
 }
 
 void save_cluster_indexes(vector<vector<size_t>> &cluster_indexes, std::ofstream &ofs) {
-    size_t size1 = cluster_indexes.size();
+    size_t size1 = 0;
+    for (auto &index : cluster_indexes) {
+        size1 += index.size();
+    }
     ofs.write(reinterpret_cast<const char *>(&size1), sizeof(size_t));
     for (auto &index : cluster_indexes) {
-        size_t size2 = index.size();
-        ofs.write(reinterpret_cast<const char *>(&size2), sizeof(size_t));
-        ofs.write(reinterpret_cast<const char *>(index.data()), size2 * sizeof(int64_t));
+        ofs.write(reinterpret_cast<const char *>(index.data()), index.size() * sizeof(int64_t));
     }
 }
 
@@ -88,7 +90,7 @@ struct IPIndex {
     IPIndex(float inner_product, size_t index) : inner_product(inner_product), index(index) {}
 
     bool operator<(const IPIndex& other) const {
-        return inner_product > other.inner_product;
+        return inner_product < other.inner_product;
     }
 };
 
@@ -298,7 +300,7 @@ void calculate(const std::string &probe_path, const std::string &encrypted_direc
 
     std::ifstream centroids_ifs("../data/gallery_data/gallery_centroids.dat");
     std::vector<float> centroids(cluster_size * DIMENSION);
-    indexes_ifs.read(reinterpret_cast<char*>(centroids.data()), cluster_size * DIMENSION * sizeof(float));
+    centroids_ifs.read(reinterpret_cast<char*>(centroids.data()), cluster_size * DIMENSION * sizeof(float));
     centroids_ifs.close();
 
     size_t cluster_per_gpu = cluster_size / gpu_count;
@@ -367,7 +369,7 @@ void calculate(const std::string &probe_path, const std::string &encrypted_direc
 
 //    probe_data = util::read_npy_data(probe_path);
     auto temp = util::read_npy_data(probe_path);
-    for (int i = 0; i < 10000; i++) {
+    for (int i = 0; i < 10; i++) {
         probe_data.push_back(temp[i]);
     }
     temp.clear();

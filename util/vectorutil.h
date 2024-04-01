@@ -18,7 +18,7 @@ namespace util {
     float *read_formatted_npy_data(const std::string &npy_name, size_t slots, float scale, size_t &size);
 
     std::vector<std::tuple<float *, size_t, size_t>>
-    read_cluster_npy_data(const std::string &npy_name, size_t slots, float scale, std::vector<float> &centroids, std::vector<std::vector<int64_t>> &indexes);
+    read_cluster_npy_data(const std::string &npy_name, size_t slots, float scale, size_t centroids_size, std::vector<float> &centroids, std::vector<std::vector<int64_t>> &indexes);
 
     class NPYReader {
 

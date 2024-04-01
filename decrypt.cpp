@@ -14,6 +14,8 @@
 #include "util/vectorutil.h"
 #include "util/keyutil.h"
 
+using namespace std;
+
 std::string ip_results_path(size_t index) {
     return "../data/ip_results/probe_" + std::to_string(index) + "_results.dat";
 }
@@ -52,6 +54,28 @@ public:
 
 };
 
+void load_results(vector<vector<sigma::Ciphertext>> &results, const sigma::SIGMAContext &context, std::ifstream &ifs) {
+    size_t size1 = 0;
+    ifs.read(reinterpret_cast<char *>(&size1), sizeof(size_t));
+    results.resize(size1);
+    for (auto &result : results) {
+        size_t size2 = 0;
+        ifs.read(reinterpret_cast<char *>(&size2), sizeof(size_t));
+        result.resize(size2);
+        for (auto &result1: result) {
+            result1.use_half_data() = true;
+            result1.load(context, ifs);
+        }
+    }
+}
+
+void load_cluster_indexes(vector<size_t> &cluster_indexes, std::ifstream &ifs) {
+    size_t size = 0;
+    ifs.read(reinterpret_cast<char *>(&size), sizeof(size_t));
+    cluster_indexes.resize(size);
+    ifs.read(reinterpret_cast<char *>(cluster_indexes.data()), size * sizeof(size_t));
+}
+
 int decrypt(const std::string &secret_key_path, const std::string &results_path) {
 
     size_t poly_modulus_degree = ConfigUtil.int64ValueForKey("poly_modulus_degree");
@@ -77,6 +101,20 @@ int decrypt(const std::string &secret_key_path, const std::string &results_path)
     size_t customized_scale_power = ConfigUtil.int64ValueForKey("customized_scale_power");
     double customized_scale = pow(2.0, customized_scale_power);
 
+
+    std::ifstream indexes_ifs("../data/gallery_data/gallery_indexes.dat", std::ios::binary);
+    size_t cluster_size = 0;
+    indexes_ifs.read(reinterpret_cast<char*>(&cluster_size), sizeof(size_t));
+
+    vector<vector<int64_t>> indexes(cluster_size);
+    for (uint cluster_idx = 0; cluster_idx < cluster_size; cluster_idx++) {
+        size_t indexes_size = 0;
+        indexes_ifs.read(reinterpret_cast<char *>(&indexes_size), sizeof(size_t));
+        indexes[cluster_idx].resize(indexes_size);
+        indexes_ifs.read(reinterpret_cast<char *>(indexes[cluster_idx].data()), indexes_size * sizeof(int64_t));
+    }
+
+
     Json::Value root;
     for (size_t i = 0;; i++) {
         std::ifstream ifs(ip_results_path(i), std::ios::binary);
@@ -88,24 +126,31 @@ int decrypt(const std::string &secret_key_path, const std::string &results_path)
         c1.use_half_data() = true;
         c1.load(context, ifs);
 
+        vector<vector<sigma::Ciphertext>> results;
+        load_results(results, context, ifs);
+        vector<size_t> cluster_indexes;
+        load_cluster_indexes(cluster_indexes, ifs);
+        sigma::Plaintext plaintext;
+        std::vector<double> dest;
         TopNPairs pairs(5);
-        size_t idx = 0;
-        while (!ifs.eof()) {
-            sigma::Ciphertext encrypted_vec;
-            encrypted_vec.use_half_data() = true;
-            try {
-                encrypted_vec.load(context, ifs);
-            } catch (const std::exception &e) {
-                break;
+        for (int j = 0; j < results.size(); j++) {
+            vector<sigma::Ciphertext> &cluster_result = results[j];
+            auto probe_cluster_indexes = indexes[cluster_indexes[j]];
+            size_t idx = 0;
+            for (auto &ct : cluster_result) {
+                decryptor.ckks_decrypt(ct, c1, plaintext);
+                encoder.decode(plaintext, dest);
+                for (auto ip : dest) {
+                    if (idx >= probe_cluster_indexes.size()) {
+                        break;
+                    }
+                    auto aa = ip / customized_scale;
+                    auto bb = probe_cluster_indexes[idx];
+                    auto pair = std::pair(aa, bb);
+                    pairs.add(pair);
+                    idx++;
+                }
             }
-            sigma::Plaintext plaintext;
-            decryptor.ckks_decrypt(encrypted_vec, c1, plaintext);
-            std::vector<double> dest;
-            encoder.decode(plaintext, dest);
-            for (auto value: dest) {
-                pairs.add(std::pair(value / customized_scale, idx++));
-            }
-//            std::cout << "Decrypt end " << idx << std::endl;
         }
         ifs.close();
         Json::Value ips;
