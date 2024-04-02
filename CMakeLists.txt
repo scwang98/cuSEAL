@@ -86,3 +86,13 @@ target_link_libraries(decrypt PRIVATE cnpy)
 target_link_libraries(decrypt PRIVATE jsoncpp)
 target_link_libraries(decrypt PRIVATE -lcurand)
 target_link_libraries(decrypt PRIVATE faiss)
+
+add_executable(verify
+        example/verify.cpp
+        ${CUSEAL_UTIL_FILES}
+)
+target_link_libraries(verify PRIVATE SIGMA::sigma)
+target_link_libraries(verify PRIVATE cnpy)
+target_link_libraries(verify PRIVATE jsoncpp)
+target_link_libraries(verify PRIVATE -lcurand)
+target_link_libraries(verify PRIVATE faiss)

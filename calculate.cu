@@ -127,7 +127,8 @@ public:
             }
         }
         std::vector<size_t> indexes;
-        for (int i = 0; i < pq.size(); ++i) {
+        auto pq_size = pq.size();
+        for (int i = 0; i < pq_size; ++i) {
             indexes.push_back(pq.top().index);
             pq.pop();
         }
