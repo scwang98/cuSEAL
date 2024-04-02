@@ -91,12 +91,13 @@ int main() {
 
     std::vector<std::vector<int64_t>> indexes;
     std::vector<float> centroids;
-    auto tuples = util::read_cluster_npy_data(gallery_path, slots, customized_scale, 30, centroids, indexes);
+    auto tuples = util::read_cluster_npy_data(gallery_path, slots, customized_scale, 100, centroids, indexes);
 
     auto temp = util::read_npy_data("../vectors/probe_x.npy");
     std::vector<std::vector<float>> probe_data;
-    for (int i = 0; i < 1; i++) {
+    for (int i = 0; i < 5; i++) {
         probe_data.push_back(temp[i]);
+//        probe_data.push_back(temp[66463]);
     }
 
     Json::Value root;
@@ -110,7 +111,7 @@ int main() {
                 ip += (*(start + j) * data[j]);
             }
             pq.emplace(ip, i);
-            if (i >= 5) {
+            if (i >= 10) {
                 pq.pop();
             }
         }

@@ -4,13 +4,13 @@
 
 #include "vectorutil.h"
 #include "../extern/cnpy/cnpy.h"
-#include "util/HostList.h"
 #include <cmath>
 #include <vector>
 
 #include <faiss/IndexFlat.h>
 #include <faiss/IndexIVFFlat.h>
 #include <faiss/invlists/InvertedLists.h>
+#include <faiss/Clustering.h>
 
 namespace util {
 
@@ -81,17 +81,15 @@ namespace util {
             std::vector<std::vector<int64_t>> &indexes,
             std::vector<float> &centroids,
             size_t centroids_size) {
+        faiss::Clustering clus(dimension, centroids_size);
         faiss::IndexFlatIP quantizer(dimension);
+        clus.train(training_set_size, training_set, quantizer);
+        memcpy(centroids.data(), clus.centroids.data(), sizeof(float) * dimension * centroids_size);
+
         faiss::IndexIVFFlat index(&quantizer, dimension, centroids_size);
-        index.train(training_set_size, training_set);
         index.add(training_set_size, training_set);
 
-//        centroids.resize(centroids_size * dimension);
-        memcpy(centroids.data(), quantizer.codes.data(), sizeof(float) * centroids_size * dimension);
-
         auto inv_lists = dynamic_cast<faiss::ArrayInvertedLists *>(index.invlists);
-//        cluster.resize(centroids_size);
-//        indexes.resize(centroids_size);
         for (int i = 0; i < centroids_size; i++) {
             auto &inv_data = inv_lists->codes[i];
             auto &clu_data = cluster[i];

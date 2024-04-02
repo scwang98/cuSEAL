@@ -122,7 +122,7 @@ public:
                 ip += (*(start + j) * data[j]);
             }
             pq.emplace(ip, i);
-            if (i >= 5) {
+            if (i >= 10) {
                 pq.pop();
             }
         }

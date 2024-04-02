@@ -39,7 +39,7 @@ encrypt(const std::string &secret_key_path, const std::string &gallery_path, con
 
     std::vector<std::vector<int64_t>> indexes;
     std::vector<float> centroids;
-    auto tuples = util::read_cluster_npy_data(gallery_path, slots, customized_scale, 30, centroids, indexes);
+    auto tuples = util::read_cluster_npy_data(gallery_path, slots, customized_scale, 100, centroids, indexes);
 
     sigma::KernelProvider::initialize();
 
