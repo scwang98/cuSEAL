@@ -92,6 +92,9 @@ struct IPIndex {
     bool operator<(const IPIndex& other) const {
         return inner_product < other.inner_product;
     }
+    bool operator>(const IPIndex& other) const {
+        return inner_product > other.inner_product;
+    }
 };
 
 class TaskManager {
@@ -111,7 +114,7 @@ public:
 
     Task *start_task(const std::vector<float>& data, int probe_index) {
         auto size = centroids.size() / DIMENSION;
-        std::priority_queue<IPIndex> pq;
+        std::priority_queue<IPIndex, vector<IPIndex>, greater<>> pq;
         for (int i = 0; i < size; ++i) {
             auto start = centroids.data() + DIMENSION * i;
             float ip = 0;
