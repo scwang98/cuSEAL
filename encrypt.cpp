@@ -31,15 +31,12 @@ encrypt(const std::string &secret_key_path, const std::string &gallery_path, con
     double scale = pow(2.0, scale_power);
     size_t customized_scale_power = ConfigUtil.int64ValueForKey("customized_scale_power");
     float customized_scale = pow(2.0, float(customized_scale_power));
-
+    size_t nlist = ConfigUtil.int64ValueForKey("nlist");
     auto slots = poly_modulus_degree / 2;
-
-//    size_t gallery_size = 0;
-//    auto gallery_ptr = util::read_formatted_npy_data(FILE_STORE_PATH + "gallery_x.npy", slots, customized_scale, gallery_size);
 
     std::vector<std::vector<int64_t>> indexes;
     std::vector<float> centroids;
-    auto tuples = util::read_cluster_npy_data(gallery_path, slots, customized_scale, 100, centroids, indexes);
+    auto tuples = util::read_cluster_npy_data(gallery_path, slots, customized_scale, nlist, centroids, indexes);
 
     sigma::KernelProvider::initialize();
 

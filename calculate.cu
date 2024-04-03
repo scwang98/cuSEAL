@@ -100,6 +100,7 @@ struct IPIndex {
 class TaskManager {
 
     std::vector<float> centroids;
+    size_t nprobe;
 
 public:
     int gpu_count;
@@ -108,7 +109,7 @@ public:
 
     util::safe_queue<Task *, 400> finished_queue;
 
-    TaskManager(int gpu_count, std::vector<float> &centroids) : gpu_count(gpu_count), centroids(centroids) {
+    TaskManager(int gpu_count, std::vector<float> &centroids, size_t nprobe) : gpu_count(gpu_count), centroids(centroids), nprobe(nprobe) {
         queues.resize(gpu_count);
     }
 
@@ -315,8 +316,9 @@ void calculate(const std::string &probe_path, const std::string &encrypted_direc
     size_t poly_modulus_degree = ConfigUtil.int64ValueForKey("poly_modulus_degree");
     size_t scale_power = ConfigUtil.int64ValueForKey("scale_power");
     double scale = pow(2.0, scale_power);
+    size_t nprobe = ConfigUtil.int64ValueForKey("nprobe");
 
-    task_manager = new TaskManager(gpu_count, centroids);
+    task_manager = new TaskManager(gpu_count, centroids, nprobe);
 
     sigma::KernelProvider::initialize();
 
@@ -371,12 +373,7 @@ void calculate(const std::string &probe_path, const std::string &encrypted_direc
 
     thread save_thread_ptr(save_thread, std::ref(result_directory));
 
-//    probe_data = util::read_npy_data(probe_path);
-    auto temp = util::read_npy_data(probe_path);
-    for (int i = 0; i < 10; i++) {
-        probe_data.push_back(temp[i]);
-    }
-    temp.clear();
+    probe_data = util::read_npy_data(probe_path);
 
 
     for (int i = 0; i < probe_data.size(); i++) {
