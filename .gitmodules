@@ -3,4 +3,4 @@
 	url = https://github.com/rogersce/cnpy.git
 [submodule "extern/faiss"]
 	path = extern/faiss
-	url = git@github.com:facebookresearch/faiss.git
+	url = https://github.com/facebookresearch/faiss.git
