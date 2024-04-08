@@ -1,5 +1,6 @@
 cmake-build*
 .idea
-vectors
+vectors/*
+!vectors/.gitkeep
 .DS_Store
 .DS_Store
