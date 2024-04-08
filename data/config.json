@@ -5,5 +5,7 @@
   "customized_scale_power": 0,
 
   "nlist": 100,
-  "nprobe": 20
+  "nprobe": 20,
+
+  "probe_max_size": 1000 // 探测库过大时计算结果会占用过多硬盘空间
 }
