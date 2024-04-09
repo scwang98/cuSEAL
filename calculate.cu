@@ -374,8 +374,9 @@ void calculate(const std::string &probe_path, const std::string &encrypted_direc
     thread save_thread_ptr(save_thread, std::ref(result_directory));
 
     probe_data = util::read_npy_data(probe_path);
-    if (probe_data.size() > 1000) {
-        probe_data = vector<vector<float>>(probe_data.begin(), probe_data.begin() + 1000);
+    auto probe_max_size = ConfigUtil.int64ValueForKey("probe_max_size");
+    if (probe_max_size > 0 && probe_data.size() > probe_max_size) {
+        probe_data = vector<vector<float>>(probe_data.begin(), probe_data.begin() + probe_max_size);
     }
 
 
