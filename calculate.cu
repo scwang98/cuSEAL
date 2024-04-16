@@ -123,7 +123,7 @@ public:
                 ip += (*(start + j) * data[j]);
             }
             pq.emplace(ip, i);
-            if (i >= 10) {
+            if (i >= nprobe) {
                 pq.pop();
             }
         }
