@@ -97,3 +97,13 @@ target_link_libraries(verify PRIVATE cnpy)
 target_link_libraries(verify PRIVATE jsoncpp)
 target_link_libraries(verify PRIVATE -lcurand)
 target_link_libraries(verify PRIVATE faiss)
+
+add_executable(plaintext_calculate
+        example/plaintext_calculate.cpp
+        ${CUSEAL_UTIL_FILES}
+)
+target_link_libraries(plaintext_calculate PRIVATE SIGMA::sigma)
+target_link_libraries(plaintext_calculate PRIVATE cnpy)
+target_link_libraries(plaintext_calculate PRIVATE jsoncpp)
+target_link_libraries(plaintext_calculate PRIVATE -lcurand)
+target_link_libraries(plaintext_calculate PRIVATE faiss)
