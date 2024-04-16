@@ -31,6 +31,24 @@ namespace util {
         }
     }
 
+    float calculateMagnitude(const float *array, size_t size) {
+        float sum = 0.0;
+        for (int i = 0; i < size; i++) {
+            auto value = array[i];
+            sum += value * value;
+        }
+        return std::sqrt(sum);
+    }
+
+    void normalizeArray(float *array, size_t size) {
+        float magnitude = calculateMagnitude(array, size);
+        if (magnitude > 0.0) {
+            for (int i = 0; i < size; i++) {
+                array[i] /= magnitude;
+            }
+        }
+    }
+
     std::vector<std::vector<float>> read_npy_data(const std::string &npy_name) {
         cnpy::NpyArray arr = cnpy::npy_load(npy_name);
         std::vector<size_t> shape = arr.shape;
@@ -46,7 +64,7 @@ namespace util {
                 auto value = data[i * numCols + j];
                 row.push_back(value);
             }
-            normalizeVector(row);
+            normalizeArray(row.data(), row.size());
             matrix.push_back(row);
         }
         return matrix;
@@ -147,9 +165,14 @@ namespace util {
         cnpy::NpyArray arr = cnpy::npy_load(npy_name);
         std::vector<size_t> shape = arr.shape;
         size_t single_size = shape[1];
+        size_t vector_count = shape[0];
         auto batch_size = slots / single_size;
 
         auto data = arr.data<float>();
+
+        for (int i = 0; i < vector_count; i++) {
+            normalizeArray(data + i * single_size, single_size);
+        }
 
         std::vector<std::vector<float>> cluster(centroids_size);
         indexes.resize(centroids_size);
