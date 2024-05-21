@@ -282,7 +282,7 @@ namespace sigma
         }
 
         inline void encrypt_symmetric_ckks(
-                const Plaintext &plain, Ciphertext &destination, Ciphertext &c1)
+                const Plaintext &plain, Ciphertext &destination, const Ciphertext &c1)
         {
             encrypt_symmetric_ckks_internal(plain, destination, c1);
         }
@@ -442,7 +442,7 @@ namespace sigma
 
         void sample_symmetric_ckks_c1_internal(Ciphertext &destination) const;
 
-        void encrypt_symmetric_ckks_internal(const Plaintext &plain, Ciphertext &destination, Ciphertext &c1);
+        void encrypt_symmetric_ckks_internal(const Plaintext &plain, Ciphertext &destination, const Ciphertext &c1);
 
         SIGMAContext context_;
 

@@ -355,7 +355,7 @@ namespace sigma
 
     }
 
-    void Encryptor::encrypt_symmetric_ckks_internal(const Plaintext &plain, Ciphertext &destination, Ciphertext &c1) {
+    void Encryptor::encrypt_symmetric_ckks_internal(const Plaintext &plain, Ciphertext &destination, const Ciphertext &c1) {
 //        auto time_start0 = std::chrono::high_resolution_clock::now();
         if (!is_metadata_valid_for(secret_key_, context_))
         {

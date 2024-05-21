@@ -26,8 +26,8 @@ namespace sigma {
     public:
 
         static void checkInitialized() {
-            if (!initialized)
-                throw std::invalid_argument("KernelProvider not initialized.");
+//            if (!initialized)
+//                throw std::invalid_argument("KernelProvider not initialized.");
         }
 
         static void initialize() {
