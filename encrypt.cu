@@ -71,7 +71,7 @@ void encrypt_thread_func(int gpu_index, int gpu_count, sigma::EncryptionParamete
 
             ciphertext.save(ofs);
         }
-//        std::cout << "The " << idx << "-th cluster encryption is completed, which contains " << origin_size << "18 feature vectors.\n";
+        std::cout << "The " << idx << "-th cluster encryption is completed, which contains " << origin_size << " feature vectors.\n";
         ofs.close();
     }
 }
